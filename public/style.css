@@ -109,6 +109,11 @@ input[type='range'] { accent-color: var(--red); }
 .room-list .meta { font-size: 13px; color: var(--ink-2); }
 .room-list .empty { cursor: default; color: var(--ink-2); display: block; text-align: center; font-size: 14px; }
 .error { color: var(--red); min-height: 1.3em; margin: 8px 0 0; font-size: 15px; text-align: center; }
+.net { margin: 6px 0 0; font-size: 12px; text-align: center; color: var(--ink-2); }
+.net::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--ink-3); vertical-align: 1px; }
+.net.ok::before { background: #3d6b3a; }
+.net.bad { color: var(--red); }
+.net.bad::before { background: var(--red); }
 .help { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 13px; color: var(--ink-2); line-height: 2; padding: 0 20px; }
 .help b { display: inline-block; font-weight: 700; border: 1px solid var(--ink-3); border-radius: 3px; padding: 0 6px; line-height: 1.5; margin: 0 2px 0 10px; }
 

@@ -43,6 +43,17 @@ game.hud = new HUD(game);
 game.player = new LocalPlayer(game);
 const { socket, hud, player, sound, ink } = game;
 
+// ── 서버 연결 상태 표시 ───────────────────────────
+const netStatus = (text, cls) => {
+  const el = $('netStatus');
+  el.textContent = text;
+  el.className = `net ${cls}`;
+};
+netStatus('서버 연결 중…', 'wait');
+socket.on('connect', () => netStatus('서버 연결됨', 'ok'));
+socket.on('connect_error', (err) => netStatus(`서버 연결 실패 (${err.message}) — 주소와 방장 PC 방화벽을 확인하세요`, 'bad'));
+socket.io.on('reconnect_attempt', (n) => netStatus(`서버에 다시 연결하는 중… (${n}번째)`, 'wait'));
+
 // ── 메뉴 ──────────────────────────────────────────
 let mode = 'tdm', difficulty = 'normal';
 $('nameInput').value = store.get('name', '');
@@ -116,9 +127,25 @@ async function enter(ev, payload) {
     $('menuError').textContent = '그림 파일을 불러오지 못했습니다. 새로고침 해 보세요.';
     return;
   }
-  socket.timeout(8000).emit(ev, payload, (err, res) => {
+  if (!socket.connected) {
+    $('menuError').textContent = '서버에 연결하는 중…';
+    const ok = await new Promise((resolve) => {
+      const on = () => done(true);
+      const t = setTimeout(() => done(false), 10000);
+      function done(v) { clearTimeout(t); socket.off('connect', on); resolve(v); }
+      socket.on('connect', on);
+      socket.connect();
+    });
+    if (!ok) {
+      busy = false;
+      $('menuError').textContent = '서버에 연결할 수 없습니다. 주소(IP:포트)가 맞는지, 방장 PC 방화벽에서 Node.js 가 허용됐는지 확인하세요.';
+      return;
+    }
+    $('menuError').textContent = '';
+  }
+  socket.timeout(15000).emit(ev, payload, (err, res) => {
     busy = false;
-    if (err) { $('menuError').textContent = '서버가 응답하지 않습니다.'; return; }
+    if (err) { $('menuError').textContent = '서버가 응답하지 않습니다. 잠시 후 다시 시도하세요.'; return; }
     onJoined(res);
   });
 }

@@ -1,6 +1,7 @@
-// 봇 길찾기 — 8방향 A* + 직선화(string pulling)
+// 봇 길찾기 — 8방향 A* + 직선화(string pulling). 격자에 높이가 있으면 계단 높이(0.55m)까지만 오르내린다.
 const DX = [1, -1, 0, 0, 1, 1, -1, -1];
 const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
+const STEP = 0.56;
 
 let cap = 0, gs, from, seen, done, hf, hi;
 let gen = 0, hn = 0;
@@ -41,6 +42,8 @@ function pop() {
   return top;
 }
 
+const heightAt = (nav, i) => (nav.height ? nav.height[i] : 0);
+
 export function cellOf(nav, x, z) {
   const c = (v) => Math.max(0, Math.min(nav.n - 1, Math.floor(v + nav.off)));
   return c(x) + c(z) * nav.n;
@@ -65,14 +68,24 @@ export function nearestOpen(nav, i) {
 
 export function lineClear(nav, ax, az, bx, bz) {
   const { n, off, blocked } = nav;
-  const d = Math.hypot(bx - ax, bz - az), steps = Math.ceil(d / 0.3);
-  const at = (x, z) => {
+  const d = Math.hypot(bx - ax, bz - az), steps = Math.max(1, Math.ceil(d / 0.3));
+  const idx = (x, z) => {
     const ix = Math.floor(x + off), iz = Math.floor(z + off);
-    return ix < 0 || iz < 0 || ix >= n || iz >= n || blocked[ix + iz * n];
+    return ix < 0 || iz < 0 || ix >= n || iz >= n ? -1 : ix + iz * n;
   };
-  for (let k = 1; k < steps; k++) {
+  const bad = (x, z) => {
+    const i = idx(x, z);
+    return i < 0 || blocked[i];
+  };
+  let prevH = heightAt(nav, Math.max(0, idx(ax, az)));
+  for (let k = 1; k <= steps; k++) {
     const t = k / steps, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-    if (at(x, z) || at(x + 0.3, z) || at(x - 0.3, z) || at(x, z + 0.3) || at(x, z - 0.3)) return false;
+    if (k < steps && (bad(x, z) || bad(x + 0.3, z) || bad(x - 0.3, z) || bad(x, z + 0.3) || bad(x, z - 0.3))) return false;
+    const i = idx(x, z);
+    if (i < 0) return false;
+    const h = heightAt(nav, i);
+    if (Math.abs(h - prevH) > STEP) return false;
+    prevH = h;
   }
   return true;
 }
@@ -80,6 +93,7 @@ export function lineClear(nav, ax, az, bx, bz) {
 // 월드 좌표 경로 [[x,z], ...] (시작점 제외) 또는 null
 export function findPath(nav, sx, sz, gx, gz, maxIter = 40000) {
   const { n, off, blocked } = nav;
+  const H = nav.height;
   ensure(n * n);
   const s = nearestOpen(nav, cellOf(nav, sx, sz));
   const g = nearestOpen(nav, cellOf(nav, gx, gz));
@@ -89,6 +103,7 @@ export function findPath(nav, sx, sz, gx, gz, maxIter = 40000) {
     const dx = Math.abs((i % n) - gxC), dz = Math.abs(((i / n) | 0) - gzC);
     return Math.max(dx, dz) + 0.414 * Math.min(dx, dz);
   };
+  const climb = (a, b) => !H || Math.abs(H[a] - H[b]) <= STEP;
 
   gen++; hn = 0;
   gs[s] = 0; seen[s] = gen; from[s] = -1;
@@ -104,8 +119,11 @@ export function findPath(nav, sx, sz, gx, gz, maxIter = 40000) {
       const dx = DX[k], dz = DZ[k], nx = cx + dx, nz = cz + dz;
       if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
       const ni = nx + nz * n;
-      if (blocked[ni] || done[ni] === gen) continue;
-      if (dx && dz && (blocked[cx + dx + cz * n] || blocked[cx + (cz + dz) * n])) continue;
+      if (blocked[ni] || done[ni] === gen || !climb(cur, ni)) continue;
+      if (dx && dz) {
+        const a = cx + dx + cz * n, b = cx + (cz + dz) * n;
+        if (blocked[a] || blocked[b] || !climb(cur, a) || !climb(cur, b)) continue;
+      }
       const ng = gs[cur] + (dx && dz ? 1.414 : 1);
       if (seen[ni] !== gen || ng < gs[ni]) {
         seen[ni] = gen; gs[ni] = ng; from[ni] = cur;

@@ -18,7 +18,9 @@ app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'th
 app.get('/healthz', (_req, res) => res.send('ok'));
 
 const server = http.createServer(app);
-const io = new Server(server, { pingInterval: 10000, pingTimeout: 8000 });
+// 프런트엔드를 다른 주소(Vercel 등)에 올려도 접속할 수 있도록 CORS 허용
+const io = new Server(server, { pingInterval: 10000, pingTimeout: 8000, cors: { origin: true } });
+const log = (...a) => console.log(`[${new Date().toLocaleTimeString('ko-KR', { hour12: false })}]`, ...a);
 
 /** @type {Map<string, Room>} */
 const rooms = new Map();
@@ -36,6 +38,17 @@ function newCode() {
 io.on('connection', (socket) => {
   /** @type {Room|null} */
   let room = null;
+  const ip = String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || '').split(',')[0].replace('::ffff:', '');
+  log(`접속 ${ip}`);
+  // 처리 중 오류가 나도 서버가 죽지 않고, 클라이언트는 기다리지 않고 오류를 받는다
+  const guard = (cb, fn) => {
+    try {
+      fn();
+    } catch (err) {
+      console.error('처리 오류:', err);
+      reply(cb, { ok: false, error: '서버 오류가 났습니다. 다시 시도하세요.' });
+    }
+  };
 
   const leave = () => {
     if (!room) return;
@@ -53,7 +66,7 @@ io.on('connection', (socket) => {
     reply(cb, [...rooms.values()].filter((r) => r.isPublic).map((r) => r.summary()));
   });
 
-  socket.on('create', (opts = {}, cb) => {
+  socket.on('create', (opts = {}, cb) => guard(cb, () => {
     leave();
     const code = newCode();
     const fill = Math.max(0, Math.min(8, Math.floor(Number(opts.fill) || 0)));
@@ -65,21 +78,28 @@ io.on('connection', (socket) => {
       hostName: cleanName(opts.name) || '병사',
     });
     rooms.set(code, room);
-    reply(cb, { ok: true, ...room.addPlayer(socket, cleanName(opts.name) || '병사', clsOf(opts.cls)) });
-  });
+    const res = room.addPlayer(socket, cleanName(opts.name) || '병사', clsOf(opts.cls));
+    log(`방 생성 ${code} — ${ip}`);
+    reply(cb, { ok: true, ...res });
+  }));
 
-  socket.on('join', (opts = {}, cb) => {
+  socket.on('join', (opts = {}, cb) => guard(cb, () => {
     const r = rooms.get(String(opts.code || '').toUpperCase().trim());
     if (!r) return reply(cb, { ok: false, error: '그런 코드의 방이 없습니다.' });
     if (r === room) return reply(cb, { ok: false, error: '이미 이 방에 있습니다.' });
     if (r.humanCount() >= ROOM_MAX) return reply(cb, { ok: false, error: '방이 가득 찼습니다.' });
     leave();
     room = r;
-    reply(cb, { ok: true, ...room.addPlayer(socket, cleanName(opts.name) || '병사', clsOf(opts.cls)) });
-  });
+    const res = room.addPlayer(socket, cleanName(opts.name) || '병사', clsOf(opts.cls));
+    log(`방 참가 ${r.code} — ${ip}`);
+    reply(cb, { ok: true, ...res });
+  }));
 
   socket.on('leave', leave);
-  socket.on('disconnect', leave);
+  socket.on('disconnect', (reason) => {
+    log(`연결 끊김 ${ip} (${reason})`);
+    leave();
+  });
 
   for (const ev of ['input', 'fire', 'throw', 'streak', 'chat', 'class', 'team']) {
     socket.on(ev, (msg) => {
