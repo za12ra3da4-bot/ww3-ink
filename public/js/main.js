@@ -175,6 +175,29 @@ function refreshRooms() {
     ul.querySelectorAll('li[data-code]').forEach((li) => li.addEventListener('click', () => lobby.h.join(li.dataset.code)));
   });
 }
+function redeemCode() {
+  const code = $('redeemInput').value.trim();
+  const msg = $('redeemMsg');
+  if (!code) return;
+  if (!socket.connected) { msg.textContent = '서버 연결 필요'; msg.className = 'bad'; return; }
+  socket.timeout(8000).emit('redeem', { code }, (err, res) => {
+    if (err || !res) { msg.textContent = '응답 없음'; msg.className = 'bad'; return; }
+    if (res.profile) setProfile(res.profile);
+    if (res.ok) {
+      msg.textContent = `코인 +${res.coins}`;
+      msg.className = 'ok';
+      $('redeemInput').value = '';
+      sound.init();
+      sound.play('coin');
+    } else {
+      msg.textContent = res.error;
+      msg.className = 'bad';
+    }
+  });
+}
+$('redeemBtn').addEventListener('click', redeemCode);
+$('redeemInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') redeemCode(); });
+
 const urlCode = new URLSearchParams(location.search).get('room');
 if (urlCode) {
   document.querySelector('.play-tabs button[data-p="join"]').click();
@@ -549,6 +572,7 @@ function setActive(on) {
     sound.play('open');
   }
   pause.hidden = !show;
+  $('hud').classList.toggle('paused', show);
   if (!on) {
     player.keys.clear();
     player.lmb = player.rmb = false;
@@ -694,7 +718,7 @@ function frame() {
   game.time += dt;
   tickSkins(game.time);
   if (game.state === 'menu') {
-    if (lobby.built) {
+    if (lobby.built && $('gachaFx').hidden) {
       lobby.update(dt, game.time);
       ink.hurt = 0;
       ink.flash = 0;

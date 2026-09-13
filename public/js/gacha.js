@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SKINS, WEAPONS, RARITY, RARITY_ORDER } from '../shared/config.js';
 import { buildGun } from './models.js';
 import { skinThumb } from './skins.js';
+import { GachaStage } from './gacha3d.js';
 
 const $ = (id) => document.getElementById(id);
 export const RCOL = { common: '#c9c2b3', rare: '#4f98dc', epic: '#b872ea', legendary: '#f2c24c' };
@@ -231,17 +232,16 @@ export class GachaFX {
     $('gfxSkip').hidden = false;
     this.particles.ambient = '#efe7d6';
     this.particles.start();
-    this.stage.innerHTML = `
-      <div class="gfx-altar">
-        <div class="gfx-halo"></div>
-        <img class="gfx-scroll" src="assets/ui/scroll.svg" alt="">
-        <div class="gfx-seal"><span class="hanja">封</span></div>
-        <div class="gfx-shards"></div>
-      </div>
-      <p class="gfx-caption">${count === 10 ? '열 개의 봉인' : '봉인된 두루마리'}를 여는 중…</p>`;
+    if (this.stage3d === undefined) {
+      try { this.stage3d = new GachaStage($('gfxStage3d')); } catch { this.stage3d = null; }
+    }
+    const S3 = this.stage3d;
+    if (S3) { S3.reset(); S3.start(); }
+    this.stage.innerHTML = S3 ? `<p class="gfx-caption low">${count === 10 ? '열 개의 봉인' : '봉인된 두루마리'}를 여는 중…</p>`
+      : `<div class="gfx-altar"><div class="gfx-halo"></div><img class="gfx-scroll" src="assets/ui/scroll.svg" alt=""><div class="gfx-seal"><span class="hanja">封</span></div><div class="gfx-shards"></div></div><p class="gfx-caption">여는 중…</p>`;
     this.sound.play('drum');
 
-    const [res] = await Promise.all([request, this.sleep(1000)]);
+    const [res] = await Promise.all([request, this.sleep(1300)]);
     if (!res || !res.ok) {
       this.stage.innerHTML = `<p class="gfx-err">${(res && res.error) || '뽑기에 실패했습니다.'}</p>`;
       this.finish();
@@ -249,28 +249,25 @@ export class GachaFX {
     }
     const thumbs = await Promise.all(res.results.map((r) => skinThumb(r.id, 240, 80)));
     const best = res.results.reduce((a, r) => (rank(r.rarity) > rank(a) ? r.rarity : a), 'common');
-
-    // 봉인 색 예고: 흰 → (희귀 이상이면) 등급 색으로 차오른다
+    const caption = this.stage.querySelector('.gfx-caption');
+    caption.textContent = best === 'legendary' ? '두루마리가 금빛으로 타오른다…' : best === 'epic' ? '봉인이 격렬하게 떨린다…' : best === 'rare' ? '봉인에 푸른 빛이 스민다…' : '봉인이 풀린다…';
     const altar = this.stage.querySelector('.gfx-altar');
-    altar.style.setProperty('--rc', RCOL[best]);
-    altar.classList.add('tease', `tease-${best}`);
-    this.stage.querySelector('.gfx-caption').textContent = best === 'legendary' ? '두루마리가 금빛으로 타오른다…' : best === 'epic' ? '봉인이 떨리기 시작한다…' : '봉인이 풀린다…';
+    if (S3) S3.teaseTo(rank(best), RCOL[best]);
+    else { altar.style.setProperty('--rc', RCOL[best]); altar.classList.add('tease', `tease-${best}`); }
     this.sound.play('charge');
     if (rank(best) >= 2) this.sound.play('drum');
-    await this.sleep(best === 'legendary' ? 1700 : best === 'epic' ? 1300 : 800);
+    await this.sleep(best === 'legendary' ? 2300 : best === 'epic' ? 1800 : 1100);
 
-    // 파쇄
-    this.shatter(altar);
+    if (S3) S3.burst(); else this.shatter(altar);
     this.el.classList.add('burst', `best-${best}`);
     const [cx, cy] = this.center();
-    this.particles.burst(cx, cy, RCOL[best], rank(best) >= 2 ? 220 : 110, rank(best) >= 2 ? 14 : 9);
-    this.particles.burst(cx, cy, '#1a1816', 60, 7);
+    this.particles.burst(cx, cy, RCOL[best], rank(best) >= 2 ? 160 : 60, rank(best) >= 2 ? 14 : 9);
     this.particles.ambient = RCOL[best];
     if (best === 'legendary') this.particles.gold = RCOL.legendary;
     this.sound.play('shatter');
     this.sound.play('whoosh');
     this.sound.play(best === 'legendary' ? 'legend' : best === 'epic' ? 'gong' : 'reveal');
-    await this.sleep(650);
+    await this.sleep(900);
 
     if (count === 1) await this.showcase(res.results[0], thumbs[0]);
     else await this.grid(res.results, thumbs);
@@ -291,13 +288,8 @@ export class GachaFX {
 
   async showcase(r, thumb, back = false) {
     const s = SKINS[r.id], R = RARITY[r.rarity];
-    this.stage.innerHTML = `
-      <div class="gshow r-${r.rarity}" style="--rc:${RCOL[r.rarity]}">
-        <div class="gs-left">
-          <div class="gs-glow"></div>
-          <canvas id="gfx3d" class="gs-3d"></canvas>
-          <img class="gs-thumb" src="${thumb}" alt="">
-        </div>
+    const S3 = this.stage3d;
+    const info = `
         <div class="gs-info">
           <div class="gs-stamp"><img src="assets/ui/seal.svg" alt=""><b class="hanja">${R.hanja}</b></div>
           <div class="gs-rarity">${R.name} 등급</div>
@@ -309,21 +301,14 @@ export class GachaFX {
             <button class="link-btn" data-act="sound">총소리 듣기</button>
             ${back ? '<button class="link-btn" data-act="back">목록으로</button>' : ''}
           </div>
-        </div>
-      </div>`;
-    const canvas = $('gfx3d');
-    if (!this.viewer) {
-      try { this.viewer = new GunViewer(canvas); } catch { this.viewer = false; }
+        </div>`;
+    if (S3) {
+      S3.reveal(r.id, RCOL[r.rarity]);
+      this.stage.innerHTML = `<div class="gshow3d r-${r.rarity}" style="--rc:${RCOL[r.rarity]}">${info}</div>`;
     } else {
-      this.viewer.renderer.dispose();
-      try { this.viewer = new GunViewer(canvas); } catch { this.viewer = false; }
+      this.stage.innerHTML = `<div class="gshow r-${r.rarity}" style="--rc:${RCOL[r.rarity]}"><div class="gs-left"><div class="gs-glow"></div><img class="gs-thumb" src="${thumb}" alt=""></div>${info}</div>`;
     }
-    if (this.viewer) {
-      this.stage.querySelector('.gs-thumb').hidden = true;
-      this.viewer.show(r.id);
-      this.viewer.start();
-    }
-    const box = this.stage.querySelector('.gshow');
+    const box = this.stage.firstElementChild;
     const equipBtn = box.querySelector('[data-act=equip]');
     if (this.isEquipped(r.id)) equipBtn.disabled = true;
     equipBtn.addEventListener('click', () => {
@@ -335,14 +320,14 @@ export class GachaFX {
     box.querySelector('[data-act=sound]').addEventListener('click', () => this.sound.gun(s.weapon, s.sound));
     const backBtn = box.querySelector('[data-act=back]');
     if (backBtn) backBtn.addEventListener('click', () => this.grid(this.lastResults, this.lastThumbs, true));
-    await this.sleep(500);
+    await this.sleep(700);
     this.sound.gun(s.weapon, s.sound);
   }
 
   async grid(results, thumbs, instant = false) {
     this.lastResults = results;
     this.lastThumbs = thumbs;
-    if (this.viewer) this.viewer.stop();
+    if (this.stage3d) this.stage3d.dim();
     this.stage.innerHTML = `<div class="ggrid">${results.map((r, i) => {
       const s = SKINS[r.id];
       return `<button class="gflip r-${r.rarity}${instant ? ' flipped' : ''}" data-i="${i}" style="--rc:${RCOL[r.rarity]};--i:${i}">
@@ -394,6 +379,6 @@ export class GachaFX {
     this.el.hidden = true;
     this.stage.innerHTML = '';
     this.particles.stop();
-    if (this.viewer) this.viewer.stop();
+    if (this.stage3d) this.stage3d.stop();
   }
 }

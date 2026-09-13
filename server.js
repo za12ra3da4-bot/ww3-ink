@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { Room } from './server/room.js';
-import { getProfile, packet, pull, equip, setLook, saveNow } from './server/profiles.js';
+import { getProfile, packet, pull, equip, setLook, redeem, saveNow } from './server/profiles.js';
 import { cleanName, MODES, DIFFICULTY, ROOM_MAX, CLASSES, MAP_IDS } from './public/shared/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +96,16 @@ io.on('connection', (socket) => {
     const ok = equip(p, String(m.skin || ''));
     if (ok && room) room.refreshAppearance(socket.id);
     reply(cb, { ok, profile: packet(p) });
+  });
+
+  on('redeem', (m, cb) => {
+    const p = needProfile();
+    const now = Date.now();
+    if (now - (socket.data.redeemAt || 0) < 1000) return reply(cb, { ok: false, error: '잠시 후 다시 시도하세요.' });
+    socket.data.redeemAt = now;
+    const res = redeem(p, m.code);
+    if (res.ok) log(`코드 사용 ${String(m.code).toUpperCase()} — ${ip}`);
+    reply(cb, { ...res, profile: packet(p) });
   });
 
   on('look', (m, cb) => {

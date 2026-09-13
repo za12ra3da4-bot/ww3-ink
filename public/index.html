@@ -27,6 +27,12 @@
     <button data-tab="armory"><img src="assets/ui/i_armory.svg" alt=""><span>무기고</span></button>
     <button data-tab="gacha"><img src="assets/ui/i_gacha.svg" alt=""><span>뽑기</span></button>
     <button data-tab="settings"><img src="assets/ui/i_settings.svg" alt=""><span>설정</span></button>
+    <div class="code-box">
+      <span>코드</span>
+      <input id="redeemInput" maxlength="24" placeholder="입력" autocomplete="off" spellcheck="false">
+      <button id="redeemBtn">받기</button>
+      <p id="redeemMsg"></p>
+    </div>
   </nav>
 
   <div class="lobby-panel">
@@ -109,6 +115,7 @@
 
 <!-- 뽑기 연출 -->
 <div id="gachaFx" class="gfx" hidden>
+  <canvas id="gfxStage3d" class="gfx-stage3d"></canvas>
   <canvas id="gfxParticles" class="gfx-particles"></canvas>
   <div class="gfx-rays"></div>
   <div class="gfx-stroke"></div>

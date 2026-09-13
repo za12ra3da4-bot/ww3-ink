@@ -42,7 +42,9 @@ export function saveNow() {
 load();
 setInterval(saveNow, 3000).unref();
 
-const fresh = () => ({ coins: GACHA.startCoins, owned: [], equip: {}, look: cleanLook(null), pulls: 0 });
+const fresh = () => ({ coins: GACHA.startCoins, owned: [], equip: {}, look: cleanLook(null), pulls: 0, codes: [] });
+// 코드 보상 (대문자로 비교, 계정당 한 번)
+const CODES = { 'BETA1.0.0': 100 };
 
 function sanitize(p) {
   const out = fresh();
@@ -51,6 +53,7 @@ function sanitize(p) {
   out.owned = [...new Set(Array.isArray(p.owned) ? p.owned.filter((id) => SKINS[id] && !SKINS[id].starter) : [])];
   out.pulls = Math.max(0, Math.floor(Number(p.pulls)) || 0);
   out.look = cleanLook(p.look);
+  out.codes = [...new Set(Array.isArray(p.codes) ? p.codes.filter((c) => CODES[c]) : [])];
   for (const w of WEAPON_IDS) {
     const id = p.equip && p.equip[w];
     if (id && SKINS[id] && SKINS[id].weapon === w && out.owned.includes(id)) out.equip[w] = id;
@@ -58,7 +61,7 @@ function sanitize(p) {
   return out;
 }
 
-const canonical = (d) => JSON.stringify({ coins: d.coins, owned: [...d.owned].sort(), equip: WEAPON_IDS.map((w) => d.equip[w] || ''), look: d.look, pulls: d.pulls });
+const canonical = (d) => JSON.stringify({ coins: d.coins, owned: [...d.owned].sort(), equip: WEAPON_IDS.map((w) => d.equip[w] || ''), look: d.look, pulls: d.pulls, codes: [...(d.codes || [])].sort() });
 const sign = (d) => crypto.createHmac('sha256', SECRET).update(canonical(d)).digest('base64url');
 
 export function getProfile(token, backup) {
@@ -122,6 +125,17 @@ export function equip(p, skinId) {
   else return false;
   dirty = true;
   return true;
+}
+
+export function redeem(p, raw) {
+  const code = String(raw || '').trim().toUpperCase();
+  const coins = CODES[code];
+  if (!coins) return { ok: false, error: '없는 코드입니다.' };
+  if (p.codes.includes(code)) return { ok: false, error: '이미 사용한 코드입니다.' };
+  p.codes.push(code);
+  p.coins += coins;
+  dirty = true;
+  return { ok: true, coins };
 }
 
 export function setLook(p, look) {
