@@ -27,12 +27,12 @@ export function city(seed) {
   // ── 시가지 블록 ──
   const building = (cx, cz, w, d, h) => {
     box(cx, 0, cz, w, h, d, 'wall');
-    k.prop('roof', cx, cz, { w, d, h });
+    k.prop('roof', cx, cz, { w, d, h, y0: 0 });
     if (rnd() < 0.4) {
       const w2 = w * R(0.35, 0.6), d2 = d * R(0.35, 0.6), h2 = R(2.5, 3.2);
       const x2 = cx + R(-(w - w2) / 2, (w - w2) / 2), z2 = cz + R(-(d - d2) / 2, (d - d2) / 2);
       box(x2, h, z2, w2, h2, d2, 'wall');
-      k.prop('roof', x2, z2, { w: w2, d: d2, h: h + h2, small: true });
+      k.prop('roof', x2, z2, { w: w2, d: d2, h: h + h2, y0: h, small: true });
     }
   };
   const wallLine = (a, b, c, axis, force) => {

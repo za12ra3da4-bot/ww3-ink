@@ -129,3 +129,33 @@ const gray = (d, i, v) => { d[i] = d[i + 1] = d[i + 2] = clamp01(v); d[i + 3] = 
 }
 
 console.log('추가 텍스처 생성 완료 →', OUT);
+
+// 풀 한 포기 (알파) — 먹으로 친 풀잎
+{
+  const S = 256, img = new Img(S, S, [0.2, 0.22, 0.18, 0]);
+  const r2 = mulberry32(3131);
+  for (let k = 0; k < 42; k++) {
+    let x = 128 + (r2() - 0.5) * 150, y = 254;
+    const lean = (r2() - 0.5) * 1.6, len = 90 + r2() * 140, steps = 30;
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps, w = (1 - t) * 5 + 0.6;
+      const nx = x + Math.sin(lean * t * 1.4) * 3.2, ny = y - len / steps;
+      img.line(x, y, nx, ny, w, [0.12 + r2() * 0.08, 0.14 + r2() * 0.08, 0.1], 0.9, 0.25, false);
+      x = nx; y = ny;
+    }
+  }
+  img.save(out('grass.png'));
+}
+
+// 아스팔트
+{
+  const S = 512, img = new Img(S, S, [0, 0, 0, 1]), n = makeNoise(41), n2 = makeNoise(42);
+  const r2 = mulberry32(4141);
+  img.each((x, y, d, i) => {
+    const u = x / S, v = y / S;
+    gray(d, i, 0.36 + (fbm(n, u * 5, v * 5, 5, 4) - 0.5) * 0.12 + (n2(u * 220, v * 220, 220) - 0.5) * 0.12);
+  });
+  for (let k = 0; k < 6; k++) { const x = r2() * S, y = r2() * S; img.rect(x, y, x + 60 + r2() * 90, y + 40 + r2() * 70, [0.28, 0.28, 0.28], 0.5); }
+  for (let k = 0; k < 18; k++) { let x = r2() * S, y = r2() * S, a = r2() * 6.28; for (let s = 0; s < 30; s++) { const nx = x + Math.cos(a) * 2, ny = y + Math.sin(a) * 2; img.line(x, y, nx, ny, 1.2, INK, 0.5, 0.4); x = nx; y = ny; a += (r2() - 0.5) * 0.8; } }
+  img.save(out('asphalt.png'));
+}
