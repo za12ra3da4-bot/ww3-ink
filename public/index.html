@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>묵전 墨戰 — 제3차 세계대전</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Brush+Script&family=Song+Myung&family=Gowun+Batang:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- 메인 메뉴 -->
+<section id="menu" class="screen">
+  <div class="menu-wrap">
+    <header class="title">
+      <img src="assets/ui/enso.svg" class="title-enso" alt="">
+      <h1 class="hanja">墨戰</h1>
+      <p class="subtitle">묵전 · 제3차 세계대전</p>
+      <div class="seal"><img src="assets/ui/seal.svg" alt=""><span>三次<br>大戰</span></div>
+    </header>
+
+    <div class="panel">
+      <label class="field"><span>이름</span><input id="nameInput" maxlength="12" placeholder="병사 이름" autocomplete="off"></label>
+
+      <div class="tabs">
+        <button class="tab-btn on" data-tab="create">방 만들기</button>
+        <button class="tab-btn" data-tab="join">참가하기</button>
+      </div>
+
+      <div class="tab" id="tab-create">
+        <div class="opt"><span>전투 방식</span>
+          <div class="seg" id="modeSeg"><button data-v="tdm" class="on">섬멸전</button><button data-v="dom">점령전</button></div>
+        </div>
+        <p class="hint" id="modeDesc"></p>
+        <div class="opt"><span>팀당 인원 <small>(빈자리는 AI)</small></span>
+          <div class="range"><input type="range" id="fillRange" min="0" max="8" value="5"><b id="fillVal">5</b></div>
+        </div>
+        <div class="opt"><span>AI 난이도</span>
+          <div class="seg" id="diffSeg"><button data-v="easy">쉬움</button><button data-v="normal" class="on">보통</button><button data-v="hard">어려움</button></div>
+        </div>
+        <label class="opt check"><input type="checkbox" id="publicCheck" checked><span>열린 전장 목록에 표시</span></label>
+        <button id="createBtn" class="brush-btn big">출 진</button>
+      </div>
+
+      <div class="tab" id="tab-join" hidden>
+        <div class="join-row">
+          <input id="codeInput" class="code-input" maxlength="4" placeholder="코드" autocomplete="off">
+          <button id="joinBtn" class="brush-btn">참 가</button>
+        </div>
+        <div class="list-head"><span>열린 전장</span><button id="refreshBtn" class="link-btn">새로고침</button></div>
+        <ul id="roomList" class="room-list"></ul>
+      </div>
+
+      <p id="menuError" class="error"></p>
+    </div>
+  </div>
+  <footer class="help">
+    <b>WASD</b> 이동 <b>마우스</b> 조준·사격 <b>우클릭</b> 정조준 <b>Shift</b> 달리기 <b>C</b> 앉기 <b>Space</b> 점프
+    <b>R</b> 재장전 <b>1·2</b> 무기 <b>G</b> 수류탄 <b>3·4·5</b> 연속처치 보상 <b>Tab</b> 점수판 <b>Enter</b> 채팅 <b>B</b> 병과
+  </footer>
+</section>
+
+<!-- 불러오는 중 -->
+<section id="loading" class="screen" hidden>
+  <img src="assets/ui/enso.svg" class="spin-enso" alt="">
+  <p id="loadingText">먹을 가는 중…</p>
+</section>
+
+<!-- 전투 화면 -->
+<section id="hud" hidden>
+  <div id="topbar">
+    <div class="team-score t0"><span class="hanja">黑</span><b id="score0">0</b></div>
+    <div class="mid"><div id="timer">10:00</div><div id="goal"></div></div>
+    <div class="team-score t1"><b id="score1">0</b><span class="hanja">朱</span></div>
+  </div>
+  <div id="points"></div>
+  <canvas id="minimap" width="240" height="240"></canvas>
+  <div id="roomCode"></div>
+  <div id="killfeed"></div>
+
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="dmgRing"></div>
+  <div id="hurtVignette"></div>
+  <div id="scope" hidden><img src="assets/ui/scope.svg" alt=""></div>
+
+  <div id="hpBox">
+    <div class="hp-label">氣</div>
+    <div id="hpBar"><div id="hpFill"></div></div>
+    <b id="hpText">100</b>
+  </div>
+  <div id="streaks"></div>
+
+  <div id="weaponBox">
+    <img id="weaponIcon" src="assets/ui/w_rifle.svg" alt="">
+    <div class="wrow"><span id="weaponName">소총</span><span id="ammo"><b id="ammoMag">30</b><i>/</i><em id="ammoRes">150</em></span></div>
+    <div class="wrow sub"><span id="reloadHint"></span><span id="grenadeBox"><img src="assets/ui/w_grenade.svg" alt=""><b id="grenadeCount">2</b></span></div>
+  </div>
+
+  <div id="notice"></div>
+  <div id="announce"></div>
+  <div id="chat"><div id="chatLog"></div><input id="chatInput" maxlength="120" placeholder="할 말을 쓰고 Enter" autocomplete="off" hidden></div>
+
+  <div id="scoreboard" class="sheet" hidden></div>
+
+  <div id="deathScreen" class="sheet" hidden>
+    <div class="death-title hanja">戰死</div>
+    <div id="deathBy"></div>
+    <div id="respawnTimer"></div>
+    <div class="pick-title">다음 출진 병과</div>
+    <div id="classPick" class="class-pick"></div>
+    <button id="teamBtn" class="brush-btn small">팀 바꾸기</button>
+  </div>
+
+  <div id="endScreen" class="sheet" hidden>
+    <div id="endTitle" class="hanja"></div>
+    <div id="endSub"></div>
+    <div id="endTable"></div>
+    <div id="endNext"></div>
+  </div>
+
+  <div id="pauseScreen" class="sheet" hidden>
+    <p class="pause-title">붓을 잠시 내려놓음</p>
+    <button id="resumeBtn" class="brush-btn big">전투 재개</button>
+    <div class="class-pick" id="pauseClassPick"></div>
+    <div class="settings">
+      <label>마우스 감도 <input type="range" id="sensRange" min="0.2" max="3" step="0.05" value="1"></label>
+      <label>음량 <input type="range" id="volRange" min="0" max="1" step="0.05" value="0.7"></label>
+    </div>
+    <div class="pause-actions">
+      <button id="pauseTeamBtn" class="link-btn">팀 바꾸기</button>
+      <button id="leaveBtn" class="link-btn">전장 이탈</button>
+    </div>
+  </div>
+
+  <div id="flash"></div>
+</section>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

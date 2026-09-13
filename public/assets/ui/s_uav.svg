@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+<defs><filter id="ink" x="-10%" y="-10%" width="120%" height="120%">
+<feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="3" seed="61" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="2.5" xChannelSelector="R" yChannelSelector="G"/>
+</filter></defs>
+<g filter="url(#ink)"><ellipse cx="60" cy="64" rx="6" ry="38" fill="#151412"/><path fill="#151412" d="M60 52 L112 66 L112 72 L60 66 L8 72 L8 66 Z"/><path fill="#151412" d="M60 92 L82 99 L82 103 L60 99 L38 103 L38 99 Z"/><path fill="none" stroke="#151412" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M24 26 Q60 2 96 26"/><path fill="none" stroke="#151412" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M36 34 Q60 18 84 34"/></g></svg>

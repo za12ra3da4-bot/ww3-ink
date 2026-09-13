@@ -1,0 +1,21 @@
+{
+  "name": "ww3-ink",
+  "version": "1.0.0",
+  "private": true,
+  "description": "묵전(墨戰) - 친구들과 즐기는 수묵화 스타일 3D 온라인 WW3 FPS",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "sim": "node scripts/simulate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "three": "^0.186.0"
+  }
+}
