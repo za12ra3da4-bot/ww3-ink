@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { defaultSkin } from '../shared/config.js';
 import { skinMaterials } from './skins.js';
+import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 
 const PI = Math.PI;
 const GEO = new Map();
@@ -180,15 +181,53 @@ const EXTRA = {
   k: new THREE.MeshPhongMaterial({ color: 0x1c1b1a, shininess: 12, specular: 0x222222 }),
 };
 
+// 도안 한 장이 총 전체를 감싸도록: 총 좌표 기준 상자 투영 UV (옆면 = 가로 총 길이, 세로 총 높이)
+const GUN_LEN = { rifle: 1.4, smg: 0.86, sniper: 1.5, shotgun: 1.32, pistol: 0.36, rocket: 1.8 };
+const BUILT = new Map();
+const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpE = new THREE.Euler(), tmpV = new THREE.Vector3(), ONE = new THREE.Vector3(1, 1, 1);
+
+function boxUV(g, L) {
+  const pos = g.attributes.position, nor = g.attributes.normal;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const ax = Math.abs(nor.getX(i)), ay = Math.abs(nor.getY(i)), az = Math.abs(nor.getZ(i));
+    let u, v;
+    if (ax >= ay && ax >= az) { u = 0.5 - z / L; v = 0.5 + y / L; }
+    else if (ay >= az) { u = 0.5 - z / L; v = 0.5 + x / L; }
+    else { u = 0.5 + x / L; v = 0.5 + y / L; }
+    uv[i * 2] = u;
+    uv[i * 2 + 1] = v;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+function gunGeometry(id) {
+  if (BUILT.has(id)) return BUILT.get(id);
+  const parts = GUNS[id] || GUNS.rifle, L = GUN_LEN[id] || 1.2;
+  const byMat = {};
+  for (const [make, mat, p, r] of parts) {
+    let g = make().clone();
+    tmpE.set(r ? r[0] : 0, r ? r[1] : 0, r ? r[2] : 0);
+    tmpQ.setFromEuler(tmpE);
+    tmpM.compose(tmpV.set(p ? p[0] : 0, p ? p[1] : 0, p ? p[2] : 0), tmpQ, ONE);
+    g.applyMatrix4(tmpM);
+    if (g.index) g = g.toNonIndexed();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    boxUV(g, L);
+    (byMat[mat] ||= []).push(g);
+  }
+  const out = Object.entries(byMat).map(([mat, list]) => [mat, mergeGeometries(list, false)]);
+  BUILT.set(id, out);
+  return out;
+}
+
 export function buildGun(id, skinId) {
-  const parts = GUNS[id] || GUNS.rifle;
   const M = skinMaterials(skinId && skinId.startsWith(`${id}.`) ? skinId : defaultSkin(id));
   const mats = { b: M.body, a: M.accent, m: M.metal, ...EXTRA };
   const g = new THREE.Group();
-  for (const [make, mat, p, r] of parts) {
-    const mesh = new THREE.Mesh(make(), mats[mat]);
-    if (p) mesh.position.set(p[0], p[1], p[2]);
-    if (r) mesh.rotation.set(r[0], r[1], r[2]);
+  for (const [mat, geo] of gunGeometry(GUNS[id] ? id : 'rifle')) {
+    const mesh = new THREE.Mesh(geo, mats[mat]);
     mesh.castShadow = true;
     g.add(mesh);
   }

@@ -31,6 +31,7 @@ import { Sound } from './audio.js';
 import { LocalPlayer } from './player.js';
 import { HUD, KILL_ICON, esc } from './hud.js';
 import { Lobby } from './lobby.js';
+import { tickSkins } from './skins.js';
 import { loadSettings, openSettings } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
@@ -691,6 +692,7 @@ function frame() {
   const nowMs = performance.now(), dt = Math.min(0.1, (nowMs - last) / 1000);
   last = nowMs;
   game.time += dt;
+  tickSkins(game.time);
   if (game.state === 'menu') {
     if (lobby.built) {
       lobby.update(dt, game.time);
