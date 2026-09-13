@@ -697,7 +697,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.code === 'KeyT') { e.preventDefault(); openChat(); return; }
   if (game.state === 'ended' && /^Digit[1-5]$/.test(e.code)) { game.vote(MAP_IDS[+e.code.slice(5) - 1]); return; }
   if (e.code === 'KeyB' || e.key === 'Escape') {
-    if (game.active) pause();
+    // B: 일시정지 창이 닫혀 있으면 열고(두루마리 애니메이션), 열려 있으면 전투로 돌아간다
+    if (game.state === 'playing' && $('pauseScreen').hidden) pause();
     else if (!$('pauseScreen').hidden && e.code === 'KeyB') lock();
     return;
   }
