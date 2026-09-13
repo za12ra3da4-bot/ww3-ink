@@ -222,6 +222,7 @@ export class Sound {
     this.vol = 0.7;
     this.voices = 0;
     this.buffers = new Map();
+    this.lastShot = new Map(); // 사수별 마지막 총소리 (연사 시 앞 소리를 끊는다)
     this.lx = 0; this.ly = 0; this.lz = 0; this.lyaw = 0;
   }
 
@@ -234,7 +235,7 @@ export class Sound {
     if (!AC) return;
     const ctx = (this.ctx = new AC());
     this.master = ctx.createGain();
-    this.master.gain.value = this.vol * 0.8;
+    this.master.gain.value = this.vol * 0.6;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12;
     comp.knee.value = 10;
@@ -252,7 +253,7 @@ export class Sound {
 
   setVolume(v) {
     this.vol = v;
-    if (this.master) this.master.gain.value = v * 0.8;
+    if (this.master) this.master.gain.value = v * 0.6;
   }
 
   // 매 프레임 카메라 위치/방향
@@ -316,18 +317,37 @@ export class Sound {
   claim() {
     if (!this.ready || this.voices > 48) return false;
     this.voices++;
-    setTimeout(() => this.voices--, 600);
+    setTimeout(() => this.voices--, 350);
     return true;
   }
 
-  gun(weapon, voice = 'classic', pos = null, gain = 1) {
+  // key: 사수 구분값. 같은 사수가 연속으로 쏘면 앞 발의 울림을 빠르게 줄여 소리가 쌓이지 않게 한다
+  gun(weapon, voice = 'classic', pos = null, gain = 1, key = 'me') {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const prev = this.lastShot.get(key);
+    if (prev) {
+      const since = t - prev.at;
+      const g = prev.choke.gain;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0, t + 0.045);
+      try { prev.src.stop(t + 0.05); } catch { /* 이미 끝남 */ }
+      // 아주 빠른 연사면 이번 발도 조금 작게
+      if (since < 0.12) gain *= 0.82;
+    }
     if (!this.claim()) return;
     const buf = this.gunBuffer(weapon, VOICES[voice] ? voice : 'classic');
-    const src = this.ctx.createBufferSource();
+    const src = ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = 0.97 + Math.random() * 0.06;
-    src.connect(this.out(pos, gain * (pos ? 1 : 0.85)));
-    src.start();
+    const choke = ctx.createGain();
+    choke.gain.value = 1;
+    src.connect(choke).connect(this.out(pos, gain * (pos ? 0.9 : 0.7)));
+    src.start(t);
+    const entry = { src, choke, at: t };
+    this.lastShot.set(key, entry);
+    src.onended = () => { if (this.lastShot.get(key) === entry) this.lastShot.delete(key); };
   }
 
   burst(dest, t, { dur, type = 'bandpass', freq = 1000, q = 1, peak = 1, attack = 0.002, sweep = 0 }) {

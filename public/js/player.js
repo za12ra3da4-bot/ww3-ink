@@ -226,7 +226,7 @@ export class LocalPlayer {
     const muzzle = this.muzzleWorld();
     const skin = SKINS[this.skinOf(W.id)] || SKINS[defaultSkin(W.id)];
     g.fx.muzzle(muzzle);
-    g.sound.gun(W.id, skin.sound);
+    g.sound.gun(W.id, skin.sound, null, 1, W.projectile ? 'me-rocket' : 'me');
     this.kick += W.recoil * (this.ads ? 0.5 : 1);
     this.pitch = Math.min(1.5, this.pitch + W.recoil * 0.3);
     this.yaw += gauss() * W.recoil * 0.25;

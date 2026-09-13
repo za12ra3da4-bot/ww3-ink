@@ -16,7 +16,7 @@ function prewarmSounds() {
     }
   };
   addFor(game.cls, game.profile && Object.fromEntries(WEAPON_KEYS.map((w) => [w, game.skinFor(w)])));
-  for (const r of game.roster.values()) addFor(r.cls, r.sk);
+  for (const r of game.roster.values()) addFor(r.cls, null);
   sound.prewarm([...jobs.values()]);
 }
 const WEAPON_KEYS = Object.keys(WEAPONS);
@@ -421,7 +421,8 @@ socket.on('shot', (m) => {
   const W = WEAPONS[m.w];
   if (!W || !game.world) return;
   const sk = SKINS[m.k];
-  sound.gun(m.w, sk ? sk.sound : 'classic', m.o);
+  // 다른 사람 총소리는 스킨과 상관없이 기본 총소리로 (스킨 총소리는 내 총에서만)
+  sound.gun(m.w, 'classic', m.o, 1, m.n);
   const s = game.soldiers.get(m.n);
   const color = sk && sk.tracer ? new THREE.Color(sk.tracer).getHex() : s && s.team === 1 ? TEAMS[1].hex : 0x141312;
   game.fx.muzzle(new THREE.Vector3(m.o[0], m.o[1] - 0.15, m.o[2]));
@@ -433,7 +434,7 @@ socket.on('shot', (m) => {
 
 socket.on('launch', (m) => {
   if (m.n === game.me.nid && m.k === 'rocket') return;
-  if (m.k === 'rocket') sound.gun('rocket', SKINS[m.sk] ? SKINS[m.sk].sound : 'classic', m.o, 0.9);
+  if (m.k === 'rocket') sound.gun('rocket', 'classic', m.o, 0.9, `r${m.n}`);
   else sound.play('throw', m.o, 0.9);
 });
 
