@@ -8,7 +8,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "sim": "node scripts/simulate.js"
+    "postinstall": "node scripts/copy-vendor.js",
+    "sim": "node scripts/simulate.js",
+    "check": "node scripts/check-maps.js",
+    "assets": "node scripts/gen-assets.js && node scripts/gen-svg.js"
   },
   "engines": {
     "node": ">=18"

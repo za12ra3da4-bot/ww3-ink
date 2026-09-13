@@ -8,30 +8,36 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nanum+Brush+Script&family=Song+Myung&family=Gowun+Batang:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
+<script src="server-url.js"></script>
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
 </head>
 <body>
 <canvas id="view"></canvas>
 
-<!-- 메인 메뉴 -->
-<section id="menu" class="screen">
-  <div class="menu-wrap">
-    <header class="title">
-      <img src="assets/ui/enso.svg" class="title-enso" alt="">
-      <h1 class="hanja">墨戰</h1>
-      <p class="subtitle">묵전 · 제3차 세계대전</p>
-      <div class="seal"><img src="assets/ui/seal.svg" alt=""><span>三次<br>大戰</span></div>
-    </header>
+<!-- 로비 -->
+<section id="menu" class="lobby" hidden>
+  <header class="lobby-top">
+    <div class="brand"><div class="brand-mark"><img src="assets/ui/enso.svg" alt=""><span class="hanja">墨戰</span></div><small>묵전 · 제3차 세계대전</small></div>
+    <div class="coin-chip" title="코인"><img src="assets/ui/coin.svg" alt=""><b id="coinCount">—</b></div>
+  </header>
 
-    <div class="panel">
+  <nav class="lobby-nav">
+    <button data-tab="play" class="on"><img src="assets/ui/i_play.svg" alt=""><span>출전</span></button>
+    <button data-tab="soldier"><img src="assets/ui/i_soldier.svg" alt=""><span>병사</span></button>
+    <button data-tab="armory"><img src="assets/ui/i_armory.svg" alt=""><span>무기고</span></button>
+    <button data-tab="gacha"><img src="assets/ui/i_gacha.svg" alt=""><span>뽑기</span></button>
+    <button data-tab="settings"><img src="assets/ui/i_settings.svg" alt=""><span>설정</span></button>
+  </nav>
+
+  <div class="lobby-panel">
+    <div class="lp enter" id="lp-play">
+      <h2>출전</h2>
       <label class="field"><span>이름</span><input id="nameInput" maxlength="12" placeholder="병사 이름" autocomplete="off"></label>
-
-      <div class="tabs">
-        <button class="tab-btn on" data-tab="create">방 만들기</button>
-        <button class="tab-btn" data-tab="join">참가하기</button>
-      </div>
-
-      <div class="tab" id="tab-create">
+      <div class="play-tabs"><button data-p="create" class="on">방 만들기</button><button data-p="join">참가하기</button></div>
+      <div id="play-create">
+        <div class="opt-title">전장</div>
+        <div class="map-pick" id="mapPick"></div>
+        <p class="hint" id="mapDesc"></p>
         <div class="opt"><span>전투 방식</span>
           <div class="seg" id="modeSeg"><button data-v="tdm" class="on">섬멸전</button><button data-v="dom">점령전</button></div>
         </div>
@@ -45,8 +51,7 @@
         <label class="opt check"><input type="checkbox" id="publicCheck" checked><span>열린 전장 목록에 표시</span></label>
         <button id="createBtn" class="brush-btn big">출 진</button>
       </div>
-
-      <div class="tab" id="tab-join" hidden>
+      <div id="play-join" hidden>
         <div class="join-row">
           <input id="codeInput" class="code-input" maxlength="4" placeholder="코드" autocomplete="off">
           <button id="joinBtn" class="brush-btn">참 가</button>
@@ -54,39 +59,84 @@
         <div class="list-head"><span>열린 전장</span><button id="refreshBtn" class="link-btn">새로고침</button></div>
         <ul id="roomList" class="room-list"></ul>
       </div>
-
-      <p id="menuError" class="error"></p>
-      <p id="netStatus" class="net"></p>
     </div>
+
+    <div class="lp" id="lp-soldier" hidden>
+      <h2>병사 꾸미기</h2>
+      <div id="lookRows" class="look-rows"></div>
+      <div class="look-foot"><button id="lookRandom" class="brush-btn small">무작위</button><span class="hint">생김새는 전장에서 다른 사람에게도 그대로 보입니다. 옷 색은 팀 색을 따릅니다.</span></div>
+    </div>
+
+    <div class="lp" id="lp-armory" hidden>
+      <h2>무기고</h2>
+      <div id="weaponTabs" class="weapon-tabs"></div>
+      <div id="skinGrid" class="skin-grid"></div>
+      <div id="skinInfo" class="skin-info"></div>
+    </div>
+
+    <div class="lp" id="lp-gacha" hidden>
+      <h2>먹통 뽑기</h2>
+      <div class="gacha-box">
+        <img src="assets/ui/scroll.svg" class="gacha-scroll" alt="">
+        <div class="gacha-side">
+          <button id="pull1" class="brush-btn pull">1회 뽑기 <span class="cost"><img src="assets/ui/coin.svg" alt="">100</span></button>
+          <button id="pull10" class="brush-btn pull">10회 뽑기 <span class="cost"><img src="assets/ui/coin.svg" alt="">900</span></button>
+          <p class="hint">10회 뽑기는 희귀 이상 1개 보장<br>이미 가진 스킨이 나오면 코인으로 돌려받습니다</p>
+          <p id="collection" class="collection"></p>
+        </div>
+      </div>
+      <table id="rates" class="rates"></table>
+      <p id="earnHint" class="hint"></p>
+    </div>
+
+    <p id="menuError" class="error"></p>
+    <p id="netStatus" class="net"></p>
   </div>
-  <footer class="help">
-    <b>WASD</b> 이동 <b>마우스</b> 조준·사격 <b>우클릭</b> 정조준 <b>Shift</b> 달리기 <b>C</b> 앉기 <b>Space</b> 점프
-    <b>R</b> 재장전 <b>1·2</b> 무기 <b>G</b> 수류탄 <b>3·4·5</b> 연속처치 보상 <b>Tab</b> 점수판 <b>Enter</b> 채팅 <b>B</b> 병과
-  </footer>
+
+  <div id="stage" class="stage"><span class="stage-hint">끌어서 돌려 보기</span></div>
 </section>
 
 <!-- 불러오는 중 -->
-<section id="loading" class="screen" hidden>
+<section id="loading" class="screen">
   <img src="assets/ui/enso.svg" class="spin-enso" alt="">
   <p id="loadingText">먹을 가는 중…</p>
 </section>
+
+<!-- 뽑기 연출 -->
+<div id="gachaFx" class="gfx" hidden>
+  <div class="gfx-rays"></div>
+  <div class="gfx-ink"></div>
+  <div id="gfxStage" class="gfx-stage"></div>
+  <div id="gfxActions" class="gfx-actions" hidden>
+    <button id="gfxAgain" class="brush-btn">한 번 더</button>
+    <button id="gfxClose" class="link-btn">닫기</button>
+  </div>
+</div>
+
+<!-- 설정 창 -->
+<div id="settingsModal" class="modal" hidden>
+  <div class="sheet settings-sheet">
+    <div class="modal-head"><h3>설정</h3><button id="settingsClose" class="link-btn">닫기</button></div>
+    <div id="settingsBody"></div>
+  </div>
+</div>
 
 <!-- 전투 화면 -->
 <section id="hud" hidden>
   <div id="topbar">
     <div class="team-score t0"><span class="hanja">黑</span><b id="score0">0</b></div>
     <div class="mid"><div id="timer">10:00</div><div id="goal"></div></div>
-    <div class="team-score t1"><b id="score1">0</b><span class="hanja">朱</span></div>
+    <div class="team-score t1"><b id="score1">0</b><span class="hanja">靑</span></div>
   </div>
   <div id="points"></div>
   <canvas id="minimap" width="240" height="240"></canvas>
   <div id="roomCode"></div>
   <div id="killfeed"></div>
+  <div id="coinPops"></div>
 
-  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
   <div id="dmgRing"></div>
-  <div id="hurtVignette"></div>
   <div id="scope" hidden><img src="assets/ui/scope.svg" alt=""></div>
 
   <div id="hpBox">
@@ -121,21 +171,24 @@
     <div id="endTitle" class="hanja"></div>
     <div id="endSub"></div>
     <div id="endTable"></div>
+    <div class="vote-title">다음 전장 투표</div>
+    <div id="voteGrid" class="vote-grid"></div>
     <div id="endNext"></div>
+    <button id="endLeaveBtn" class="link-btn">로비로 나가기</button>
   </div>
 
   <div id="pauseScreen" class="sheet" hidden>
+    <div class="scroll-rod top"></div>
     <p class="pause-title">붓을 잠시 내려놓음</p>
     <button id="resumeBtn" class="brush-btn big">전투 재개</button>
+    <div class="pick-title">병과</div>
     <div class="class-pick" id="pauseClassPick"></div>
-    <div class="settings">
-      <label>마우스 감도 <input type="range" id="sensRange" min="0.2" max="3" step="0.05" value="1"></label>
-      <label>음량 <input type="range" id="volRange" min="0" max="1" step="0.05" value="0.7"></label>
-    </div>
     <div class="pause-actions">
+      <button id="pauseSettingsBtn" class="link-btn">설정 (감도 · 조준점)</button>
       <button id="pauseTeamBtn" class="link-btn">팀 바꾸기</button>
-      <button id="leaveBtn" class="link-btn">전장 이탈</button>
+      <button id="leaveBtn" class="link-btn">로비로 나가기</button>
     </div>
+    <div class="scroll-rod bottom"></div>
   </div>
 
   <div id="flash"></div>

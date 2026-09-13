@@ -1,7 +1,7 @@
-// 묵전(墨戰) 클라이언트 — 메뉴, 네트워크, 게임 루프
+// 묵전(墨戰) 클라이언트 — 로비, 네트워크, 게임 루프
 import * as THREE from 'three';
-import { io } from '/socket.io/socket.io.esm.min.js';
-import { CLASSES, MODES, TEAMS, STREAKS, WEAPONS, PLAYER } from '../shared/config.js';
+import { io } from '../vendor/socket.io.esm.min.js';
+import { CLASSES, MODES, TEAMS, STREAKS, WEAPONS, PLAYER, SKINS, MAPS, MAP_IDS, defaultSkin } from '../shared/config.js';
 import { generateMap } from '../shared/map.js';
 import { World, rayPlayer } from '../shared/physics.js';
 import { InkRenderer } from './ink.js';
@@ -12,91 +12,144 @@ import { FX } from './fx.js';
 import { Sound } from './audio.js';
 import { LocalPlayer } from './player.js';
 import { HUD, KILL_ICON, esc } from './hud.js';
+import { Lobby } from './lobby.js';
+import { loadSettings, openSettings } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
-  get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* 저장 불가 환경 */ } },
 };
 const CLS = Object.fromEntries(CLASSES.map((c) => [c.id, c]));
+const settings = loadSettings();
+
+// ── 서버 연결 / 내 토큰 ───────────────────────────
+const serverUrl = String(settings.server || window.MUKJEON_SERVER || '').trim();
+const socket = io(serverUrl || undefined, { reconnectionDelayMax: 4000 });
+
+function getToken() {
+  let t = store.get('mukjeon.token');
+  if (!t || !/^[A-Za-z0-9_-]{16,64}$/.test(t)) {
+    const a = new Uint8Array(18);
+    crypto.getRandomValues(a);
+    t = btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    store.set('mukjeon.token', t);
+  }
+  return t;
+}
+let backup = null;
+try { backup = JSON.parse(store.get('mukjeon.profile') || 'null'); } catch { backup = null; }
 
 const game = {
-  socket: io(),
-  time: 0, locked: false, active: false, chatOpen: false, state: 'menu',
-  settings: { sens: +store.get('sens', 1) || 1, vol: +store.get('vol', 0.7) },
+  socket, settings,
+  time: 0, locked: false, active: false, chatOpen: false, state: 'menu', lockSupported: false,
   me: { nid: -1, team: 0 }, meHp: 100, cls: CLS[store.get('cls')] ? store.get('cls') : 'rifleman',
+  profile: backup && backup.data ? backup.data : null,
   soldiers: new Map(), roster: new Map(),
   scores: [0, 0], timeLeft: 0, cp: null, uav: [0, 0], strikes: [], nuke: null,
-  offset: null, respawnAt: 0, nextMatchAt: 0, code: '', mode: 'tdm', seed: null,
+  offset: null, respawnAt: 0, voteEndsAt: 0, code: '', mode: 'tdm', mapKey: null,
   hurtFx: 0, flash: 0, aimNid: -1,
   scene: new THREE.Scene(),
   camera: new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 900),
   fx: null,
+  skinFor(id) { return (this.profile && this.profile.equip[id]) || defaultSkin(id); },
+  vote(map) {
+    if (this.state !== 'ended' || !MAP_IDS.includes(map)) return;
+    socket.emit('vote', { map });
+    hud.myVote = map;
+    document.querySelectorAll('.vote-card').forEach((c) => c.classList.toggle('mine', c.dataset.map === map));
+    sound.play('click');
+  },
 };
 game.scene.background = new THREE.Color(0xffffff);
 game.camera.rotation.order = 'YXZ';
 game.scene.add(game.camera);
-game.ink = new InkRenderer($('view'));
+game.ink = new InkRenderer($('view'), settings.quality);
 game.sound = new Sound();
-game.sound.setVolume(game.settings.vol);
 game.hud = new HUD(game);
 game.player = new LocalPlayer(game);
-const { socket, hud, player, sound, ink } = game;
+const { hud, player, sound, ink } = game;
 
-// ── 서버 연결 상태 표시 ───────────────────────────
+function applySettings(s) {
+  sound.setVolume(s.vol);
+  hud.applySettings(s);
+  if (s.quality !== ink.quality) ink.setQuality(s.quality);
+}
+applySettings(settings);
+
+function setProfile(packet) {
+  if (!packet || !packet.data) return;
+  game.profile = packet.data;
+  store.set('mukjeon.profile', JSON.stringify(packet));
+  lobby.refresh();
+  player.refreshSkin();
+}
+
 const netStatus = (text, cls) => {
   const el = $('netStatus');
   el.textContent = text;
   el.className = `net ${cls}`;
 };
 netStatus('서버 연결 중…', 'wait');
-socket.on('connect', () => netStatus('서버 연결됨', 'ok'));
-socket.on('connect_error', (err) => netStatus(`서버 연결 실패 (${err.message}) — 주소와 방장 PC 방화벽을 확인하세요`, 'bad'));
+socket.on('connect', () => {
+  netStatus(serverUrl ? `서버 연결됨 · ${serverUrl}` : '서버 연결됨', 'ok');
+  socket.emit('hello', { token: getToken(), backup }, (res) => { if (res && res.ok) setProfile(res.profile); });
+});
+socket.on('connect_error', (err) => {
+  const vercel = /vercel\.app$/.test(location.hostname) && !serverUrl;
+  netStatus(vercel
+    ? '게임 서버 주소가 없습니다 — 설정에서 서버 주소(예: Render)를 넣으세요'
+    : `서버 연결 실패 (${err.message}) — 주소와 방장 PC 방화벽을 확인하세요`, 'bad');
+});
 socket.io.on('reconnect_attempt', (n) => netStatus(`서버에 다시 연결하는 중… (${n}번째)`, 'wait'));
 
-// ── 메뉴 ──────────────────────────────────────────
-let mode = 'tdm', difficulty = 'normal';
+// ── 로비 ─────────────────────────────────────────
 $('nameInput').value = store.get('name', '');
-const seg = (id, cb) => {
-  const btns = $(id).querySelectorAll('button');
-  btns.forEach((b) => b.addEventListener('click', () => {
-    btns.forEach((x) => x.classList.toggle('on', x === b));
-    cb(b.dataset.v);
-  }));
-};
-seg('modeSeg', (v) => { mode = v; $('modeDesc').textContent = MODES[v].desc; });
-seg('diffSeg', (v) => { difficulty = v; });
-$('modeDesc').textContent = MODES.tdm.desc;
-$('fillRange').addEventListener('input', () => { $('fillVal').textContent = $('fillRange').value; });
-
-const showTab = (name) => {
-  document.querySelectorAll('.tab-btn').forEach((x) => x.classList.toggle('on', x.dataset.tab === name));
-  $('tab-create').hidden = name !== 'create';
-  $('tab-join').hidden = name !== 'join';
-  if (name === 'join') refreshRooms();
-};
-document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
-
-function refreshRooms() {
-  socket.emit('rooms', (list) => {
-    const ul = $('roomList');
-    if (!list || !list.length) {
-      ul.innerHTML = '<li class="empty">열린 전장이 없습니다. 직접 만들어 보세요.</li>';
-      return;
-    }
-    ul.innerHTML = list.map((r) => `<li data-code="${r.code}"><span class="code">${r.code}</span>` +
-      `<span>${esc(r.host)}의 전장<br><span class="meta">${MODES[r.mode] ? MODES[r.mode].name : ''} · 사람 ${r.humans} / 전체 ${r.total}</span></span>` +
-      `<span class="meta">${r.state === 'ended' ? '정산 중' : '전투 중'}</span></li>`).join('');
-    ul.querySelectorAll('li[data-code]').forEach((li) => li.addEventListener('click', () => join(li.dataset.code)));
-  });
-}
-$('refreshBtn').addEventListener('click', refreshRooms);
-
 const playerName = () => {
   const n = $('nameInput').value.trim().slice(0, 12) || `병사${Math.floor(Math.random() * 900 + 100)}`;
   store.set('name', n);
   return n;
 };
+
+const lobby = new Lobby(game, {
+  settings: () => openSettings(settings, applySettings),
+  look: (look) => socket.emit('look', { look }, (res) => res && setProfile(res.profile)),
+  equip: (skin) => socket.emit('equip', { skin }, (res) => res && setProfile(res.profile)),
+  gacha: (count) => new Promise((resolve) => {
+    if (!socket.connected) return resolve({ ok: false, error: '서버에 연결되어 있지 않습니다.' });
+    socket.timeout(10000).emit('gacha', { count }, (err, res) => resolve(err ? { ok: false, error: '서버가 응답하지 않습니다.' } : res));
+  }),
+  setProfile,
+  refreshRooms,
+  create: (opts) => enter('create', { ...opts, name: playerName(), cls: game.cls }),
+  join: (code) => {
+    code = String(code || '').trim().toUpperCase();
+    if (code.length !== 4) { $('menuError').textContent = '방 코드 4자리를 입력하세요.'; return; }
+    enter('join', { code, name: playerName(), cls: game.cls });
+  },
+});
+
+function refreshRooms() {
+  socket.emit('rooms', (list) => {
+    const ul = $('roomList');
+    if (!Array.isArray(list) || !list.length) {
+      ul.innerHTML = '<li class="empty">열린 전장이 없습니다. 직접 만들어 보세요.</li>';
+      return;
+    }
+    ul.innerHTML = list.map((r) => {
+      const M = MAPS.find((m) => m.id === r.map);
+      return `<li data-code="${r.code}"><span class="code">${r.code}</span>` +
+        `<span>${esc(r.host)}의 전장<br><span class="meta">${M ? M.name : ''} · ${MODES[r.mode] ? MODES[r.mode].name : ''} · 사람 ${r.humans} / 전체 ${r.total}</span></span>` +
+        `<span class="meta">${r.state === 'ended' ? '투표 중' : '전투 중'}</span></li>`;
+    }).join('');
+    ul.querySelectorAll('li[data-code]').forEach((li) => li.addEventListener('click', () => lobby.h.join(li.dataset.code)));
+  });
+}
+const urlCode = new URLSearchParams(location.search).get('room');
+if (urlCode) {
+  document.querySelector('.play-tabs button[data-p="join"]').click();
+  $('codeInput').value = urlCode.toUpperCase().slice(0, 4);
+}
 
 let assetsReady = null;
 function ensureAssets() {
@@ -108,11 +161,17 @@ function ensureAssets() {
     ]).then(() => {
       ink.setPaper(tex.paper);
       game.fx = new FX(game.scene);
+      lobby.build();
     }).finally(() => { $('loading').hidden = true; });
     assetsReady.catch(() => { assetsReady = null; });
   }
   return assetsReady;
 }
+ensureAssets().then(() => {
+  $('menu').hidden = false;
+  ink.setMist(30, 220);
+  lobby.refresh();
+}).catch(() => { $('loading').hidden = false; $('loadingText').textContent = '그림 파일을 불러오지 못했습니다. 새로고침 해 보세요.'; });
 
 let busy = false;
 async function enter(ev, payload) {
@@ -138,7 +197,7 @@ async function enter(ev, payload) {
     });
     if (!ok) {
       busy = false;
-      $('menuError').textContent = '서버에 연결할 수 없습니다. 주소(IP:포트)가 맞는지, 방장 PC 방화벽에서 Node.js 가 허용됐는지 확인하세요.';
+      $('menuError').textContent = '서버에 연결할 수 없습니다. 주소가 맞는지, 방장 PC 방화벽에서 Node.js 가 허용됐는지 확인하세요.';
       return;
     }
     $('menuError').textContent = '';
@@ -149,18 +208,6 @@ async function enter(ev, payload) {
     onJoined(res);
   });
 }
-$('createBtn').addEventListener('click', () => enter('create', {
-  name: playerName(), mode, difficulty, fill: +$('fillRange').value, isPublic: $('publicCheck').checked, cls: game.cls,
-}));
-function join(code) {
-  code = String(code || '').trim().toUpperCase();
-  if (code.length !== 4) { $('menuError').textContent = '방 코드 4자리를 입력하세요.'; return; }
-  enter('join', { code, name: playerName(), cls: game.cls });
-}
-$('joinBtn').addEventListener('click', () => join($('codeInput').value));
-$('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') join($('codeInput').value); });
-const urlCode = new URLSearchParams(location.search).get('room');
-if (urlCode) { showTab('join'); $('codeInput').value = urlCode.toUpperCase().slice(0, 4); }
 
 // ── 입장 / 전투 시작 ─────────────────────────────
 function onJoined(res) {
@@ -169,7 +216,6 @@ function onJoined(res) {
   game.code = res.code;
   game.roster.clear();
   applyRoster(res.roster);
-  game.state = 'playing';
   startMatch(res);
   $('menu').hidden = true;
   $('hud').hidden = false;
@@ -177,7 +223,11 @@ function onJoined(res) {
   history.replaceState(null, '', `?room=${res.code}`);
   hud.chat({ sys: true, text: `방 코드 ${res.code} — 친구에게 알려 주면 같은 전장에 들어올 수 있습니다.` });
   hud.streaks(player);
-  showPause(true);
+  if (res.state === 'ended' && res.vote) {
+    hud.end({ waiting: true, winner: -1, scores: res.scores, roster: res.roster, vote: res.vote });
+  } else {
+    showPause();
+  }
 }
 
 function startMatch(info) {
@@ -188,13 +238,14 @@ function startMatch(info) {
   game.nuke = null;
   game.strikes = [];
   game.deathPos = null;
-  if (game.seed !== info.seed) {
-    game.seed = info.seed;
+  const key = `${info.map}:${info.seed}`;
+  if (game.mapKey !== key) {
+    game.mapKey = key;
     if (game.worldView) game.worldView.dispose();
     game.fx.clear();
-    game.map = generateMap(info.seed);
+    game.map = generateMap(info.map, info.seed);
     game.world = new World(game.map.boxes);
-    game.worldView = buildWorld(game.scene, game.map);
+    game.worldView = buildWorld(game.scene, game.map, ink);
     game.worldView.setMode(info.mode);
     hud.setMap(game.map, info.mode);
     for (const s of game.soldiers.values()) s.buf.length = 0;
@@ -231,15 +282,16 @@ function removeSoldier(nid) {
 function leaveGame(msg) {
   socket.emit('leave');
   game.state = 'menu';
-  game.active = false;
-  document.body.classList.remove('active');
+  softUnlock = null;
+  setActive(false);
+  document.body.classList.remove('free');
   if (document.pointerLockElement) document.exitPointerLock();
   for (const nid of [...game.soldiers.keys()]) removeSoldier(nid);
   game.roster.clear();
   if (game.worldView) { game.worldView.dispose(); game.worldView = null; }
   game.world = null;
   game.map = null;
-  game.seed = null;
+  game.mapKey = null;
   game.offset = null;
   if (game.fx) game.fx.clear();
   player.die();
@@ -247,6 +299,8 @@ function leaveGame(msg) {
   for (const id of ['pauseScreen', 'deathScreen', 'endScreen', 'scoreboard']) $(id).hidden = true;
   $('menu').hidden = false;
   $('menuError').textContent = msg || '';
+  ink.setMist(30, 220);
+  lobby.refresh();
   history.replaceState(null, '', location.pathname);
 }
 
@@ -271,8 +325,10 @@ function pickClass(id) {
 socket.on('match', (info) => {
   if (!game.world) return;
   startMatch(info);
-  hud.announce('새 전투', `${MODES[info.mode].name} — 먼저 ${MODES[info.mode].scoreLimit}점`);
+  const M = MAPS.find((m) => m.id === info.map);
+  hud.announce(`${M ? M.name : '새 전투'}`, `${MODES[info.mode].name} — 먼저 ${MODES[info.mode].scoreLimit}점`);
   sound.play('gong');
+  softResume();
 });
 
 socket.on('snap', (m) => {
@@ -309,6 +365,7 @@ socket.on('spawn', (m) => {
   $('deathScreen').hidden = true;
   hud.streaks(player);
   sound.play('spawn');
+  softResume();
 });
 
 socket.on('kill', (m) => {
@@ -321,7 +378,10 @@ socket.on('kill', (m) => {
     game.deathPos = new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
     game.killerNid = m.k !== m.v ? m.k : -1;
     game.respawnAt = game.time + PLAYER.respawnTime;
-    if (game.state === 'playing') showDeath(K && m.k !== m.v ? K : null, m.w);
+    if (game.state === 'playing') {
+      showDeath(K && m.k !== m.v ? K : null, m.w);
+      softRelease('dead');
+    }
   } else if (m.k === game.me.nid) {
     hud.stamp('斬', `${V ? V.name : ''} ${m.h ? '헤드샷 +125' : '처치 +100'}`);
   }
@@ -330,16 +390,22 @@ socket.on('kill', (m) => {
 socket.on('shot', (m) => {
   const W = WEAPONS[m.w];
   if (!W || !game.world) return;
-  sound.play(W.sound, m.o);
+  const sk = SKINS[m.k];
+  sound.gun(m.w, sk ? sk.sound : 'classic', m.o);
   const s = game.soldiers.get(m.n);
+  const color = sk && sk.tracer ? new THREE.Color(sk.tracer).getHex() : s && s.team === 1 ? TEAMS[1].hex : 0x141312;
   game.fx.muzzle(new THREE.Vector3(m.o[0], m.o[1] - 0.15, m.o[2]));
   m.e.forEach((end, i) => {
-    if (i < 3) game.fx.tracer(m.o, end, game.camera.position, s ? s.team === 1 : false);
+    if (i < 3) game.fx.tracer(m.o, end, game.camera.position, color);
     if (i < 2) game.fx.puff(end);
   });
 });
 
-socket.on('launch', (m) => sound.play(m.k === 'rocket' ? 'rocket' : 'throw', m.o, 0.9));
+socket.on('launch', (m) => {
+  if (m.n === game.me.nid && m.k === 'rocket') return;
+  if (m.k === 'rocket') sound.gun('rocket', SKINS[m.sk] ? SKINS[m.sk].sound : 'classic', m.o, 0.9);
+  else sound.play('throw', m.o, 0.9);
+});
 
 socket.on('boom', (m) => {
   if (!game.world) return;
@@ -361,23 +427,29 @@ socket.on('hitmark', (m) => {
   sound.play(m.k ? 'kill' : 'hit');
 });
 
+socket.on('coins', (m) => {
+  setProfile(m.profile);
+  if (game.state !== 'menu') hud.coins(m.n, m.why);
+  sound.play('coin');
+});
+
 socket.on('reward', (m) => {
   const s = STREAKS.find((x) => x.id === m.id);
   if (!s) return;
-  player.rewards.push(m.id);
+  if (!player.rewards.includes(m.id)) player.rewards.push(m.id);
   hud.streaks(player);
-  hud.announce(`${s.name} 준비`, `[${STREAKS.indexOf(s) + 3}] 키 — ${s.desc}`);
+  hud.announce(`${s.name} 준비 완료`, `[${STREAKS.indexOf(s) + 3}] 키를 눌러 사용 — ${s.desc}`);
   sound.play('gong');
 });
 
 socket.on('streak', (m) => {
   const r = game.roster.get(m.n), mine = m.team === game.me.team, who = r ? r.name : '누군가';
   if (m.id === 'uav') {
-    hud.announce(mine ? '아군 정찰기 출격' : '적 정찰기 포착', `${who} · 20초`, !mine);
+    hud.announce(mine ? '아군 정찰기 출격' : '적 정찰기 포착', `${who} · 20초`, mine ? '' : 'red');
     sound.play('whistle');
   } else if (m.id === 'artillery') {
     game.strikes.push({ x: m.p[0], z: m.p[1], until: game.time + 5.5 });
-    hud.announce(mine ? '포격 개시' : '적 포격 요청!', mine ? who : '지도의 붉은 표시에서 벗어나라', !mine);
+    hud.announce(mine ? '포격 개시' : '적 포격 요청!', mine ? who : '지도의 붉은 표시에서 벗어나라', mine ? '' : 'red');
     sound.play('whistle', [m.p[0], 25, m.p[1]]);
   } else if (m.id === 'nuke') {
     game.nuke = { team: m.team, at: game.time + m.dur };
@@ -399,50 +471,59 @@ socket.on('nukeboom', (m) => {
 socket.on('point', (m) => {
   if (!game.map) return;
   const P = game.map.points[m.p];
-  hud.announce(m.team < 0 ? `거점 ${P.label} 중립화` : `거점 ${P.label} · ${TEAMS[m.team].name} 점령`, '', m.team === 1);
+  hud.announce(m.team < 0 ? `거점 ${P.label} 중립화` : `거점 ${P.label} · ${TEAMS[m.team].name} 점령`, '', m.team === 1 ? 'blue' : '');
   sound.play('gong');
 });
 
 socket.on('end', (m) => {
   game.state = 'ended';
-  game.nextMatchAt = game.time + 12;
   player.die();
   $('deathScreen').hidden = true;
+  $('pauseScreen').hidden = true;
   hud.end(m);
   sound.play('gong');
+  softRelease('end');
 });
+socket.on('votes', (info) => hud.votes(info));
 
 socket.on('chat', (m) => hud.chat(m));
 socket.on('left', (m) => removeSoldier(m.nid));
 socket.on('teamchange', (m) => {
   game.me.team = m.team;
   player.die();
-  hud.announce(`${TEAMS[m.team].name}으로 이동`);
+  hud.announce(`${TEAMS[m.team].name}으로 이동`, '', m.team === 1 ? 'blue' : '');
 });
-socket.on('disconnect', () => { if (game.state !== 'menu') leaveGame('서버와 연결이 끊어졌습니다.'); });
+socket.on('disconnect', () => { if (game.state !== 'menu') leaveGame('서버와 연결이 끊어졌습니다. 다시 연결되면 방 코드로 들어오세요.'); });
 
 // ── 마우스 잠금 / 일시정지 / 채팅 ────────────────
-// 마우스 고정(pointer lock)이 막힌 환경에서도 조작할 수 있도록 active 상태를 따로 둔다.
-let lockNoticeShown = false;
+// softUnlock: 죽었거나 판이 끝나 잠시 마우스를 풀어 준 상태 ('dead' | 'end')
+let softUnlock = null, lockNoticeShown = false;
 function lockFailed() {
-  if (lockNoticeShown || game.state === 'menu') return;
+  if (game.state === 'menu') return;
+  if (game.lockSupported) { setActive(false); return; }
+  if (lockNoticeShown) return;
   lockNoticeShown = true;
   hud.chat({ sys: true, text: '이 창에서는 마우스 고정이 안 됩니다. Q/E 로도 시점을 돌릴 수 있고, 크롬 같은 일반 브라우저로 열면 훨씬 편합니다.' });
 }
 function setActive(on) {
   game.active = on;
   document.body.classList.toggle('active', on);
-  $('pauseScreen').hidden = on;
+  const pause = $('pauseScreen');
+  const show = !on && game.state === 'playing';
+  if (show && pause.hidden) {
+    pause.classList.remove('open');
+    void pause.offsetWidth;
+    pause.classList.add('open');
+    sound.play('open');
+  }
+  pause.hidden = !show;
   if (!on) {
     player.keys.clear();
     player.lmb = player.rmb = false;
     hud.classCards($('pauseClassPick'), game.cls, pickClass);
   }
 }
-function lock() {
-  if (game.state === 'menu') return;
-  sound.init();
-  setActive(true);
+function requestLock() {
   try {
     const p = document.body.requestPointerLock();
     if (p && p.catch) p.catch(lockFailed);
@@ -450,29 +531,47 @@ function lock() {
     lockFailed();
   }
 }
+function lock() {
+  if (game.state === 'menu') return;
+  sound.init();
+  softUnlock = null;
+  document.body.classList.remove('free');
+  setActive(true);
+  requestLock();
+}
 function pause() {
+  softUnlock = null;
+  document.body.classList.remove('free');
   if (document.pointerLockElement) document.exitPointerLock();
   setActive(false);
 }
-function showPause(on) {
-  if (on) pause();
-  else lock();
+function showPause() { pause(); }
+function softRelease(reason) {
+  if (!game.active) return;
+  softUnlock = reason;
+  document.body.classList.add('free');
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+function softResume() {
+  if (!softUnlock) return;
+  softUnlock = null;
+  document.body.classList.remove('free');
+  if (game.active && game.lockSupported && !game.locked) requestLock();
 }
 document.addEventListener('pointerlockerror', lockFailed);
 document.addEventListener('pointerlockchange', () => {
   const was = game.locked;
   game.locked = document.pointerLockElement === document.body;
-  if (game.state !== 'menu' && was && !game.locked && !game.chatOpen) setActive(false);
+  if (game.locked) game.lockSupported = true;
+  if (game.state !== 'menu' && was && !game.locked && !game.chatOpen && !softUnlock) setActive(false);
 });
 $('resumeBtn').addEventListener('click', lock);
-$('view').addEventListener('click', () => { if (!game.active) lock(); });
+$('view').addEventListener('click', () => { if (!game.active && game.state === 'playing') lock(); });
 $('leaveBtn').addEventListener('click', () => leaveGame());
 $('teamBtn').addEventListener('click', () => socket.emit('team'));
 $('pauseTeamBtn').addEventListener('click', () => socket.emit('team'));
-$('sensRange').value = game.settings.sens;
-$('volRange').value = game.settings.vol;
-$('sensRange').addEventListener('input', (e) => { game.settings.sens = +e.target.value; store.set('sens', e.target.value); });
-$('volRange').addEventListener('input', (e) => { game.settings.vol = +e.target.value; sound.setVolume(+e.target.value); store.set('vol', e.target.value); });
+$('pauseSettingsBtn').addEventListener('click', () => openSettings(settings, applySettings));
+$('endLeaveBtn').addEventListener('click', () => leaveGame());
 
 function openChat() {
   game.chatOpen = true;
@@ -490,10 +589,14 @@ function closeChat() {
   i.hidden = true;
   i.blur();
   $('chat').classList.remove('open');
-  lock();
+  if (game.state === 'playing' && !softUnlock) lock();
 }
 document.addEventListener('keydown', (e) => {
-  if (game.state === 'menu') return;
+  if (game.state === 'menu') {
+    if (e.key === 'Escape' && !$('gachaFx').hidden) lobby.closeGacha();
+    return;
+  }
+  if (!$('settingsModal').hidden) return;
   if (e.code === 'Tab') { e.preventDefault(); hud.scoreboard(true); return; }
   if (game.chatOpen) {
     if (e.key === 'Enter') {
@@ -504,8 +607,13 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Enter' || e.code === 'KeyT') { e.preventDefault(); openChat(); return; }
-  if ((e.code === 'KeyB' || e.key === 'Escape') && game.active) { pause(); return; }
-  if (!player.alive && /^Digit[1-4]$/.test(e.code)) pickClass(CLASSES[+e.code.slice(5) - 1].id);
+  if (game.state === 'ended' && /^Digit[1-5]$/.test(e.code)) { game.vote(MAP_IDS[+e.code.slice(5) - 1]); return; }
+  if (e.code === 'KeyB' || e.key === 'Escape') {
+    if (game.active) pause();
+    else if (!$('pauseScreen').hidden && e.code === 'KeyB') lock();
+    return;
+  }
+  if (!player.alive && game.state === 'playing' && /^Digit[1-4]$/.test(e.code)) pickClass(CLASSES[+e.code.slice(5) - 1].id);
 });
 document.addEventListener('keyup', (e) => { if (e.code === 'Tab') hud.scoreboard(false); });
 
@@ -552,13 +660,22 @@ function frame() {
   const nowMs = performance.now(), dt = Math.min(0.1, (nowMs - last) / 1000);
   last = nowMs;
   game.time += dt;
-  if (!game.world || game.state === 'menu') return;
+  if (game.state === 'menu') {
+    if (lobby.built) {
+      lobby.update(dt, game.time);
+      ink.hurt = 0;
+      ink.flash = 0;
+      ink.render(lobby.scene, lobby.camera);
+    }
+    return;
+  }
+  if (!game.world) return;
   player.update(dt);
   if (!player.alive) deathCam(dt);
   const rt = nowMs / 1000 + (game.offset ?? 0) - 0.1;
   for (const s of game.soldiers.values()) s.update(rt, dt, game.time);
   updateTags();
-  game.worldView.update(game.camera, game.time);
+  game.worldView.update(game.camera, game.time, dt);
   game.fx.update(dt);
   game.hurtFx = Math.max(0, game.hurtFx - dt * 0.8);
   game.flash = Math.max(0, game.flash - dt * 0.9);
@@ -571,3 +688,4 @@ function frame() {
 requestAnimationFrame(frame);
 
 window.__game = game; // 디버깅용
+window.__lobby = lobby;

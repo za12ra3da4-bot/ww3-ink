@@ -1,15 +1,13 @@
-// 내 병사 — 입력, 이동 물리, 사격 판정, 1인칭 무기 모델
+// 내 병사 — 입력, 이동 물리, 사격 판정, 1인칭 무기 모델(스킨)
 import * as THREE from 'three';
-import { PLAYER, WEAPONS, CLASSES, STREAKS } from '../shared/config.js';
+import { PLAYER, WEAPONS, CLASSES, STREAKS, SKINS, TEAMS, defaultSkin } from '../shared/config.js';
 import { moveBody, rayPlayer } from '../shared/physics.js';
-import { buildGun } from './soldier.js';
-import { TEAM_COLOR } from './assets.js';
+import { buildViewmodel, GUN_MUZZLE } from './models.js';
 
 const CLS = Object.fromEntries(CLASSES.map((c) => [c.id, c]));
 const r2 = (v) => Math.round(v * 100) / 100;
 const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
-const MUZZLE = { rifle: -0.56, smg: -0.34, sniper: -0.82, shotgun: -0.66, pistol: -0.13, rocket: -0.75 };
-const BASE_FOV = 75;
+const VM_SCALE = 0.62;
 
 export class LocalPlayer {
   constructor(game) {
@@ -37,9 +35,9 @@ export class LocalPlayer {
     this.grenades = 0;
     this.rewards = [];
     this.semiReady = true;
-    this.fov = BASE_FOV;
+    this.fov = 75;
     this.vm = new THREE.Group();
-    this.vmPos = new THREE.Vector3(0.2, -0.2, -0.62);
+    this.vmPos = new THREE.Vector3(0.2, -0.2, -0.6);
     game.camera.add(this.vm);
     this.bind();
   }
@@ -49,6 +47,8 @@ export class LocalPlayer {
   get control() { return this.g.active && !this.g.chatOpen && this.alive && this.g.state === 'playing'; }
   get reloading() { return this.reloadUntil > 0; }
   get ads() { return this.control && this.rmb && !this.reloading && !this.sprinting && this.g.time > this.switchUntil; }
+  get baseFov() { return this.g.settings.fov || 75; }
+  skinOf(id) { return this.g.skinFor(id); }
 
   bind() {
     const onKey = (e, down) => {
@@ -64,8 +64,8 @@ export class LocalPlayer {
     document.addEventListener('keydown', (e) => onKey(e, true));
     document.addEventListener('keyup', (e) => onKey(e, false));
     document.addEventListener('mousedown', (e) => {
-      if (!this.g.active) return;
-      if (e.button === 0) { this.lmb = true; }
+      if (!this.g.active || !this.alive) return;
+      if (e.button === 0) this.lmb = true;
       if (e.button === 2) this.rmb = true;
     });
     document.addEventListener('mouseup', (e) => {
@@ -76,10 +76,13 @@ export class LocalPlayer {
       if (this.control && Math.abs(e.deltaY) > 20) this.switchTo(this.slot === 'primary' ? 'secondary' : 'primary');
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.g.active || !this.alive) return;
-      const s = 0.0021 * this.g.settings.sens * (this.fov / BASE_FOV);
+      if (!this.g.locked || !this.alive || !this.g.active) return;
+      const S = this.g.settings, W = this.weapon;
+      const scoped = this.ads && W.scope;
+      const mul = this.ads ? (scoped ? S.scopeMul : S.adsMul) : 1;
+      const s = 0.0021 * S.sens * mul * (this.fov / this.baseFov);
       this.yaw -= e.movementX * s;
-      this.pitch = Math.max(-1.5, Math.min(1.5, this.pitch - e.movementY * s));
+      this.pitch = Math.max(-1.5, Math.min(1.5, this.pitch - e.movementY * s * (S.invertY ? -1 : 1)));
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('blur', () => { this.keys.clear(); this.lmb = this.rmb = false; });
@@ -98,6 +101,7 @@ export class LocalPlayer {
     this.cls = msg.cls;
     this.grenades = msg.gr;
     this.rewards = msg.rw || [];
+    this.streak = msg.st || 0;
     const mk = (id) => ({ id, mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve });
     this.inv = { primary: mk(C.primary), secondary: mk(C.secondary) };
     this.slot = 'primary';
@@ -114,27 +118,25 @@ export class LocalPlayer {
   }
 
   buildViewmodel() {
+    for (const o of this.vm.children) {
+      o.traverse((m) => { if (m.isMesh && m.geometry.type === 'CapsuleGeometry') m.geometry.dispose(); });
+    }
     this.vm.clear();
+    if (!this.cur) return;
     const id = this.cur.id;
-    const gun = buildGun(id);
-    this.vm.add(gun);
-    const cloth = new THREE.MeshLambertMaterial({ color: TEAM_COLOR[this.g.me.team] });
-    const skin = new THREE.MeshLambertMaterial({ color: 0xd9cfbe });
-    const arm = (x, y, z, rx, ry, len) => {
-      const a = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.085, len), cloth);
-      a.position.set(x, y, z);
-      a.rotation.set(rx, ry, 0);
-      const h = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.09), skin);
-      h.position.set(0, 0, -len / 2 - 0.04);
-      a.add(h);
-      this.vm.add(a);
-    };
-    arm(0.03, -0.1, 0.22, 0.2, 0.1, 0.2);
-    if (id !== 'pistol') arm(-0.03, -0.07, -0.16, 0.25, -0.15, 0.16);
-    this.vm.traverse((o) => { if (o.isMesh) o.castShadow = false; });
-    this.vm.scale.setScalar(0.6);
-    this.muzzleZ = MUZZLE[id] * 0.6;
-    this.vm.visible = true;
+    const model = buildViewmodel(id, this.skinOf(id), this.g.me.team);
+    model.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+    this.vm.add(model);
+    this.vm.scale.setScalar(VM_SCALE);
+    this.muzzleZ = GUN_MUZZLE[id];
+    this.vm.visible = this.alive;
+    this.vmKey = `${id}|${this.skinOf(id)}|${this.g.me.team}`;
+  }
+
+  refreshSkin() {
+    if (!this.cur) return;
+    const key = `${this.cur.id}|${this.skinOf(this.cur.id)}|${this.g.me.team}`;
+    if (key !== this.vmKey) this.buildViewmodel();
   }
 
   switchTo(slot) {
@@ -160,7 +162,8 @@ export class LocalPlayer {
   }
 
   muzzleWorld() {
-    return new THREE.Vector3(0, 0.02, this.muzzleZ).applyMatrix4(this.vm.matrixWorld);
+    this.vm.updateMatrixWorld(true);
+    return new THREE.Vector3(0, 0.02, this.muzzleZ || -0.5).applyMatrix4(this.vm.matrixWorld);
   }
 
   throwGrenade() {
@@ -179,17 +182,27 @@ export class LocalPlayer {
 
   useStreak(s) {
     const g = this.g;
-    if (!s || !this.rewards.includes(s.id)) return;
+    if (!s) return;
+    if (!this.rewards.includes(s.id)) {
+      g.hud.announce(`${s.name} 아직 사용 불가`, `연속 ${s.kills}킬 필요 (지금 ${this.streak || 0}킬)`);
+      return;
+    }
     const msg = { id: s.id };
     if (s.id === 'artillery') {
       const cam = g.camera.position, f = this.forward();
       const hit = g.world.raycast(cam.x, cam.y, cam.z, f.x, f.y, f.z, 300);
-      if (!hit) { g.hud.announce('포격 지점을 땅에 조준하세요', '', true); return; }
+      if (!hit) { g.hud.announce('포격 지점을 땅에 조준하세요', '', 'red'); return; }
       msg.p = [r2(hit.x), r2(hit.y), r2(hit.z)];
     }
     this.rewards.splice(this.rewards.indexOf(s.id), 1);
     g.socket.emit('streak', msg);
     g.hud.streaks(this);
+  }
+
+  tracerColor(id) {
+    const s = SKINS[this.skinOf(id)];
+    if (s && s.tracer) return new THREE.Color(s.tracer).getHex();
+    return this.g.me.team ? TEAMS[1].hex : 0x141312;
   }
 
   fire() {
@@ -206,8 +219,9 @@ export class LocalPlayer {
     const cam = g.camera.position;
     const f = this.forward();
     const muzzle = this.muzzleWorld();
+    const skin = SKINS[this.skinOf(W.id)] || SKINS[defaultSkin(W.id)];
     g.fx.muzzle(muzzle);
-    g.sound.play(W.sound);
+    g.sound.gun(W.id, skin.sound);
     this.kick += W.recoil * (this.ads ? 0.5 : 1);
     this.pitch = Math.min(1.5, this.pitch + W.recoil * 0.3);
     this.yaw += gauss() * W.recoil * 0.25;
@@ -226,13 +240,14 @@ export class LocalPlayer {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(g.camera.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(g.camera.quaternion);
     const ends = [], hits = [];
+    const color = this.tracerColor(W.id);
     let hitAny = false;
     for (let p = 0; p < W.pellets; p++) {
       const d = f.clone().addScaledVector(right, gauss() * spread).addScaledVector(up, gauss() * spread).normalize();
       const wh = g.world.raycast(cam.x, cam.y, cam.z, d.x, d.y, d.z, W.range);
       let best = wh ? wh.t : W.range, target = null, head = false;
       for (const s of g.soldiers.values()) {
-        if (s.nid === g.me.nid || !s.state.alive || s.team === g.me.team) continue;
+        if (!s.state.alive || s.team === g.me.team) continue;
         const r = rayPlayer(cam.x, cam.y, cam.z, d.x, d.y, d.z, best, s.state);
         if (r) { best = r.t; target = s; head = r.head; }
       }
@@ -245,7 +260,7 @@ export class LocalPlayer {
       } else if (wh) {
         g.fx.impact(end, wh.n);
       }
-      if (p < 3 && (W.pellets > 1 || Math.random() < (W.id === 'sniper' ? 1 : 0.5))) g.fx.tracer([muzzle.x, muzzle.y, muzzle.z], end, cam, g.me.team === 1);
+      if (p < 3 && (W.pellets > 1 || skin.tracer || Math.random() < (W.id === 'sniper' ? 1 : 0.5))) g.fx.tracer([muzzle.x, muzzle.y, muzzle.z], end, cam, color);
     }
     g.socket.emit('fire', { w: W.id, o: [r2(cam.x), r2(cam.y), r2(cam.z)], e: ends, h: hitAny ? hits : [] });
     if (c.mag <= 0) setTimeout(() => this.startReload(), 200);
@@ -260,7 +275,6 @@ export class LocalPlayer {
     }
     const ctl = this.control, W = this.weapon, C = CLS[this.cls];
 
-    // 재장전 완료
     if (this.reloading && t >= this.reloadUntil) {
       const c = this.cur, take = Math.min(W.mag - c.mag, c.reserve);
       c.mag += take;
@@ -272,7 +286,7 @@ export class LocalPlayer {
     // 이동
     const fwd = ctl ? (this.has('KeyW', 'ArrowUp') ? 1 : 0) - (this.has('KeyS', 'ArrowDown') ? 1 : 0) : 0;
     const side = ctl ? (this.has('KeyD', 'ArrowRight') ? 1 : 0) - (this.has('KeyA', 'ArrowLeft') ? 1 : 0) : 0;
-    let crouch = ctl && this.has('KeyC', 'KeyZ');
+    let crouch = ctl && this.has('KeyC', 'KeyZ', 'ControlLeft');
     if (!crouch && this.crouch && !g.world.bodyFits(b.x, b.y, b.z, b.radius, PLAYER.height)) crouch = true;
     this.crouch = crouch;
     b.height = crouch ? PLAYER.crouchHeight : PLAYER.height;
@@ -304,28 +318,26 @@ export class LocalPlayer {
     const shake = g.fx.shake;
     if (shake > 0) { cam.rotation.x += (Math.random() - 0.5) * shake * 0.05; cam.rotation.y += (Math.random() - 0.5) * shake * 0.05; }
     const ads = this.ads;
-    const targetFov = ads ? W.adsFov : this.sprinting ? BASE_FOV + 6 : BASE_FOV;
+    const targetFov = ads ? W.adsFov * (this.baseFov / 75) : this.sprinting ? this.baseFov + 6 : this.baseFov;
     this.fov += (targetFov - this.fov) * Math.min(1, dt * 14);
     if (Math.abs(cam.fov - this.fov) > 0.01) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
     this.bloom = Math.max(0, this.bloom - dt * 0.08);
 
-    // 사격
     if (ctl && this.lmb && t >= this.nextFire && t >= this.switchUntil && !this.reloading && !this.sprinting && (W.auto || this.semiReady)) this.fire();
 
     // 1인칭 무기 자세
-    const scoped = ads && W.scope && this.fov < W.adsFov + 8;
+    const scoped = ads && W.scope && this.fov < W.adsFov * (this.baseFov / 75) + 10;
     this.vm.visible = !scoped;
     const target = ads
-      ? new THREE.Vector3(0, W.id === 'pistol' ? -0.05 : -0.055, W.id === 'pistol' ? -0.42 : -0.5)
-      : this.sprinting ? new THREE.Vector3(0.17, -0.27, -0.55) : new THREE.Vector3(0.2, -0.2, -0.62);
-    if (this.reloading) target.y -= 0.12;
+      ? new THREE.Vector3(0, W.id === 'pistol' ? -0.06 : W.id === 'sniper' ? -0.1 : -0.065, W.id === 'pistol' ? -0.36 : -0.42)
+      : this.sprinting ? new THREE.Vector3(0.14, -0.28, -0.5) : new THREE.Vector3(0.19, -0.2, -0.56);
+    if (this.reloading) target.y -= 0.1;
     if (t < this.switchUntil) target.y -= (this.switchUntil - t) * 0.6;
     this.vmPos.lerp(target, Math.min(1, dt * 16));
     const sway = hs > 0.5 ? Math.sin(this.bobT) * (ads ? 0.003 : 0.012) : 0;
     this.vm.position.set(this.vmPos.x + sway, this.vmPos.y + Math.abs(sway) * 0.6, this.vmPos.z + this.kick * 0.8);
     this.vm.rotation.set(this.kick * 2 + (this.reloading ? 0.5 : 0) + (this.sprinting ? -0.35 : 0), this.sprinting ? 0.7 : 0, this.reloading ? 0.3 : 0);
 
-    // 서버로 위치 전송 (20Hz)
     if (t >= this.sendAt) {
       this.sendAt = t + 0.05;
       const flags = (crouch ? 2 : 0) | (hs > 0.5 ? 4 : 0) | (this.sprinting ? 8 : 0) | (ads ? 16 : 0) | (b.onGround ? 0 : 32) | (this.reloading ? 64 : 0);

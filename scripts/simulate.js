@@ -1,9 +1,10 @@
-// 서버 로직 헤드리스 시뮬레이션 — node scripts/simulate.js [tdm|dom] [초] [팀당인원]
+// 서버 로직 헤드리스 시뮬레이션 — node scripts/simulate.js [tdm|dom] [초] [팀당인원] [맵]
 import { Room } from '../server/room.js';
 
 const mode = process.argv[2] || 'tdm';
 const seconds = Number(process.argv[3]) || 180;
 const fill = Number(process.argv[4]) || 6;
+const map = process.argv[5] || 'random';
 
 const realNow = Date.now;
 let fakeNow = realNow();
@@ -19,7 +20,7 @@ const io = {
 
 const origSetInterval = globalThis.setInterval;
 globalThis.setInterval = () => 0;
-const room = new Room(io, 'TEST', { mode, difficulty: 'normal', fill, isPublic: false, hostName: 'sim' });
+const room = new Room(io, 'TEST', { mode, difficulty: 'normal', fill, map, isPublic: false, hostName: 'sim' });
 globalThis.setInterval = origSetInterval;
 room.rebalanceBots();
 
@@ -58,7 +59,7 @@ for (let i = 0; i < seconds * 30; i++) {
 const bad = [...room.ents.values()].filter((e) => ![e.x, e.y, e.z, e.yaw, e.pitch, e.hp].every(Number.isFinite));
 const byWeapon = {};
 for (const k of kills) byWeapon[k.w] = (byWeapon[k.w] || 0) + 1;
-console.log(`모드 ${mode} | 봇 ${room.ents.size}명 | 시뮬 ${(ticks / 30).toFixed(0)}초 | 실제 ${realNow() - wall0}ms`);
+console.log(`맵 ${room.mapId} | 모드 ${mode} | 봇 ${room.ents.size}명 | 시뮬 ${(ticks / 30).toFixed(0)}초 | 실제 ${realNow() - wall0}ms`);
 console.log(`tick 평균 ${(total / ticks).toFixed(3)}ms, 최대 ${maxTick.toFixed(2)}ms`);
 console.log('점수', room.scores, '처치', kills.length, '무기별', byWeapon, '폭발', booms);
 console.log('거점 변화', points.length, '최종 거점', room.points.map((c) => c.owner));

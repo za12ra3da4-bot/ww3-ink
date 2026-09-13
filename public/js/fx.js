@@ -57,11 +57,11 @@ export class FX {
   }
 
   // 붓 한 획 같은 예광탄
-  tracer(from, to, camPos, red) {
+  tracer(from, to, camPos, color = 0x141312) {
     const dir = V.set(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
     const len = dir.length();
     if (len < 0.5) return;
-    const mat = new THREE.MeshBasicMaterial({ map: tex.stroke, color: red ? 0xb8331e : 0x141312, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+    const mat = new THREE.MeshBasicMaterial({ map: tex.stroke, color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
     const m = new THREE.Mesh(this.tracerGeo, mat);
     const start = Math.min(len * 0.15, 1.2);
     const a = new THREE.Vector3(...from).addScaledVector(dir.clone().normalize(), start);

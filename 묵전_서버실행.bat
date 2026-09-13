@@ -1,18 +1,25 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
-title ë¬µì „ WW3 ì„œë²„
+title ¹¬Àü WW3 ¼­¹ö
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js ê°€ ì„¤ì¹˜ë˜ì–´ ìžˆì§€ ì•ŠìŠµë‹ˆë‹¤. https://nodejs.org ì—ì„œ ì„¤ì¹˜í•œ ë’¤ ë‹¤ì‹œ ì‹¤í–‰í•˜ì„¸ìš”.
+  echo Node.js °¡ ¼³Ä¡µÇ¾î ÀÖÁö ¾Ê½À´Ï´Ù. https://nodejs.org ¿¡¼­ LTS ¹öÀüÀ» ¼³Ä¡ÇÑ µÚ ´Ù½Ã ½ÇÇàÇÏ¼¼¿ä.
   pause
   exit /b
 )
-if not exist node_modules (
-  echo ì²˜ìŒ ì‹¤í–‰: í•„ìš”í•œ íŒŒì¼ì„ ì„¤ì¹˜í•©ë‹ˆë‹¤...
+if not exist node_modules\express (
+  echo Ã³À½ ½ÇÇà: ÇÊ¿äÇÑ ÆÄÀÏÀ» ¼³Ä¡ÇÕ´Ï´Ù...
   call npm install
 )
+:loop
 echo.
-echo  ì•„ëž˜ ì£¼ì†Œ ì¤‘ í•˜ë‚˜ë¥¼ ì¹œêµ¬ì—ê²Œ ì•Œë ¤ ì£¼ì„¸ìš”. ì´ ì°½ì„ ë‹«ìœ¼ë©´ ì„œë²„ê°€ êº¼ì§‘ë‹ˆë‹¤.
+echo  ¾Æ·¡ ÁÖ¼Ò¸¦ Ä£±¸¿¡°Ô ¾Ë·Á ÁÖ¼¼¿ä. ÀÌ Ã¢À» ´ÝÀ¸¸é ¼­¹ö°¡ ²¨Áý´Ï´Ù.
 node server.js
-pause
+if %errorlevel%==2 (
+  pause
+  exit /b
+)
+echo.
+echo  ¼­¹ö°¡ ¸ØÃè½À´Ï´Ù. 5ÃÊ µÚ ÀÚµ¿À¸·Î ´Ù½Ã ÄÕ´Ï´Ù. ²ô·Á¸é ÀÌ Ã¢À» ´ÝÀ¸¼¼¿ä.
+timeout /t 5 /nobreak >nul
+goto loop

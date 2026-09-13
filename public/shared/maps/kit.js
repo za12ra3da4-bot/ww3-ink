@@ -198,6 +198,32 @@ export function createKit(seed) {
       box(x, 0, z, 0.16, 6, 0.16);
       prop('banner', x, z, { team });
     },
+    deadtree(x, z, snow = false) {
+      box(x, 0, z, 0.45, 4, 0.45);
+      prop('deadtree', x, z, { h: R(4.5, 7.5), snow });
+    },
+    // 발자국(w×d, 여백 m)이 비어 있으면 놓는다
+    fits(x, z, rot, w, d, m = 1.5) {
+      const [fw, fd] = foot(rot, w, d);
+      return free(x, z, fw, fd, m);
+    },
+    scatter(count, tries, area, fn) {
+      let placed = 0;
+      for (let i = 0; i < tries && placed < count; i++) {
+        const x = R(area[0], area[1]), z = R(area[2], area[3]), rot = rnd() < 0.5 ? 0 : Q;
+        if (fn(x, z, rot)) placed++;
+      }
+      return placed;
+    },
+    // 거점 둘레 모래주머니 엄폐
+    pointCover(points) {
+      for (const p of points) {
+        kit.sandbags(p.x - 4.3, p.z + R(-1, 1), Q, R(2.4, 3.2));
+        kit.sandbags(p.x + 4.3, p.z + R(-1, 1), Q, R(2.4, 3.2));
+        kit.sandbags(p.x + R(-1, 1), p.z - 4.4, 0, R(2.2, 3));
+        kit.sandbags(p.x + R(-1, 1), p.z + 4.4, 0, R(2.2, 3));
+      }
+    },
 
     spawnRow(team, z, x0, x1, count = 12) {
       const list = [];

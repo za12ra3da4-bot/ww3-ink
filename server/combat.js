@@ -1,5 +1,5 @@
 // 사격 · 투척 · 폭발 · 연속처치 보상 — 서버 권한 판정
-import { WEAPONS, PROJECTILES, PLAYER, STREAKS, CLASSES, MAP_HALF, falloffDamage } from '../public/shared/config.js';
+import { WEAPONS, PROJECTILES, PLAYER, STREAKS, CLASSES, MAP_HALF, COIN, falloffDamage } from '../public/shared/config.js';
 import { rayPlayer } from '../public/shared/physics.js';
 
 const CLS = Object.fromEntries(CLASSES.map((c) => [c.id, c]));
@@ -33,6 +33,7 @@ export function kill(room, v, k, weapon, head) {
   if (k && k !== v && k.team !== v.team) {
     k.kills++;
     k.score += head ? 125 : 100;
+    room.award(k, COIN.kill + (head ? COIN.headshot : 0), head ? '헤드샷' : '처치');
     if (room.opts.mode === 'tdm') room.scores[k.team]++;
     if (weapon !== 'nuke') {
       k.streak++;
@@ -47,7 +48,7 @@ export function kill(room, v, k, weapon, head) {
   }
   for (const [id, dmg] of v.dmgBy) {
     const a = room.ents.get(id);
-    if (a && a !== k && dmg >= 35) { a.assists++; a.score += 50; }
+    if (a && a !== k && dmg >= 35) { a.assists++; a.score += 50; room.award(a, COIN.assist, '도움'); }
   }
   v.dmgBy.clear();
   room.broadcast('kill', { k: k ? k.nid : -1, v: v.nid, w: weapon, h: head ? 1 : 0, p: [r2(v.x), r2(v.y), r2(v.z)] });
@@ -66,7 +67,7 @@ export function handleFire(room, e, msg) {
   e.w = w.id;
   const o = vec(msg.o) || eyeOf(e);
   const ends = Array.isArray(msg.e) ? msg.e.slice(0, w.pellets).map(vec).filter(Boolean) : [];
-  room.broadcast('shot', { n: e.nid, w: w.id, o: o.map(r2), e: ends.map((p) => p.map(r2)) }, e);
+  room.broadcast('shot', { n: e.nid, w: w.id, k: e.skins[w.id], o: o.map(r2), e: ends.map((p) => p.map(r2)) }, e);
   if (!Array.isArray(msg.h)) return;
   const totals = new Map();
   for (const h of msg.h.slice(0, w.pellets)) {
@@ -107,7 +108,7 @@ export function botFire(room, bot, w, dirs) {
     totals.set(r.target, c);
   }
   bot.lastShotAt = room.now;
-  room.broadcast('shot', { n: bot.nid, w: w.id, o: o.map(r2), e: ends });
+  room.broadcast('shot', { n: bot.nid, w: w.id, k: bot.skins[w.id], o: o.map(r2), e: ends });
   for (const [t, c] of totals) damage(room, t, c.dmg, bot, w.id, c.head, [r2(bot.x), r2(bot.z)]);
 }
 
@@ -140,7 +141,7 @@ export function launch(room, e, kind, o, d) {
     fuse: room.now + P.fuse,
   };
   room.projectiles.push(q);
-  room.broadcast('launch', { id: q.id, k: kind, n: e.nid, o: [r2(q.x), r2(q.y), r2(q.z)] });
+  room.broadcast('launch', { id: q.id, k: kind, n: e.nid, sk: kind === 'rocket' ? e.skins.rocket : null, o: [r2(q.x), r2(q.y), r2(q.z)] });
 }
 
 export function updateProjectiles(room, dt) {

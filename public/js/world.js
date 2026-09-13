@@ -1,45 +1,23 @@
-// 맵 데이터 → Three.js 장면 (지형, 건물, 소나무, 먼 산, 붉은 해, 거점)
+// 맵 데이터 → Three.js 장면 (땅, 빛, 소품, 먼 산, 해, 깃발, 거점, 눈)
 import * as THREE from 'three';
-import { tex, boxGeometry, mergeGeometries, labelTexture, TEAM_COLOR } from './assets.js';
-import { MAP_HALF } from '../shared/config.js';
+import { tex, labelTexture, bannerTexture } from './assets.js';
+import { buildProps } from './props.js';
+import { MAP_HALF, TEAMS } from '../shared/config.js';
+import { THEMES } from '../shared/map.js';
 
-const lambert = (map, color) => new THREE.MeshLambertMaterial({ map, color });
-
-function materials() {
-  return {
-    wall: lambert(tex.wall, 0xe6e2da),
-    ruin: lambert(tex.ruin, 0xd4cfc5),
-    sandbag: lambert(tex.sandbag, 0xcac3b3),
-    crate: lambert(tex.crate, 0xbfb6a6),
-    metal: lambert(tex.metal, 0x8f8e89),
-    wood: lambert(tex.ruin, 0x837b70),
-    trunk: new THREE.MeshLambertMaterial({ color: 0x2c2a27 }),
-  };
-}
-
-const KIND = {
-  building: ['wall', 8, 6.4],
-  ruin: ['ruin', 4, 4], stone: ['ruin', 3, 3], bunker: ['ruin', 4, 4], lowwall: ['ruin', 4, 4],
-  rubble: ['ruin', 2, 2], barrier: ['ruin', 2.4, 2.4], step: ['ruin', 2, 2],
-  sandbag: ['sandbag', 2, 1.1],
-  crate: ['crate', 0, 0],
-  tank: ['metal', 3, 3], turret: ['metal', 3, 3], barrel: ['metal', 3, 3], car: ['metal', 3, 3], carTop: ['metal', 3, 3],
-  post: ['wood', 2, 2], deck: ['wood', 2, 2], rail: ['wood', 2, 2],
-  trunk: ['trunk', 0, 0],
-};
-
-export function buildWorld(scene, map) {
+export function buildWorld(scene, map, ink) {
+  const theme = THEMES[map.id] || THEMES.city;
   const group = new THREE.Group();
-  const mats = materials();
+  ink.setMist(theme.mist[0], theme.mist[1]);
 
   // 빛
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x77736d, 1.35);
-  const sun = new THREE.DirectionalLight(0xffffff, 2.3);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x77736d, theme.snow ? 1.55 : 1.35);
+  const sun = new THREE.DirectionalLight(0xffffff, theme.snow ? 1.9 : 2.3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -65, right: 65, top: 65, bottom: -65, near: 1, far: 260 });
-  sun.shadow.bias = -0.0006;
-  sun.shadow.normalBias = 0.05;
+  sun.shadow.mapSize.set(ink.shadowSize, ink.shadowSize);
+  Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 300 });
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.04;
   const sunDir = new THREE.Vector3(-0.45, 0.8, -0.4).normalize();
   group.add(hemi, sun, sun.target);
 
@@ -47,104 +25,102 @@ export function buildWorld(scene, map) {
   const S = 1400;
   const groundGeo = new THREE.PlaneGeometry(S, S);
   const guv = groundGeo.attributes.uv;
-  for (let i = 0; i < guv.count; i++) guv.setXY(i, (guv.getX(i) * S) / 14, (guv.getY(i) * S) / 14);
-  const ground = new THREE.Mesh(groundGeo, lambert(tex.ground, 0xe2ded6));
+  const tile = theme.groundTex === 'snowfield' ? 22 : 14;
+  for (let i = 0; i < guv.count; i++) guv.setXY(i, (guv.getX(i) * S) / tile, (guv.getY(i) * S) / tile);
+  const ground = new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ map: tex[theme.groundTex], color: theme.ground }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   group.add(ground);
 
-  // 구조물 — 재질별로 하나의 메시로 합친다
-  const buckets = new Map();
-  for (const b of map.boxes) {
-    const K = KIND[b.kind];
-    if (!K) continue;
-    const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
-    const g = boxGeometry(w, h, d, K[1], K[2]);
-    g.translate((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
-    if (!buckets.has(K[0])) buckets.set(K[0], []);
-    buckets.get(K[0]).push(g);
-  }
-  for (const [key, geos] of buckets) {
-    const mesh = new THREE.Mesh(mergeGeometries(geos), mats[key]);
-    mesh.castShadow = mesh.receiveShadow = true;
-    group.add(mesh);
-  }
+  // 소품 + 재질 상자
+  const { mats } = buildProps(group, map);
 
-  // 경계 철조망 말뚝
+  // 경계 철조망
   const posts = [];
   for (let t = -MAP_HALF; t <= MAP_HALF; t += 5) {
     for (const [x, z] of [[t, -MAP_HALF], [t, MAP_HALF], [-MAP_HALF, t], [MAP_HALF, t]]) {
-      const g = boxGeometry(0.14, 1.5, 0.14);
+      if (map.id === 'harbor' && x > 60) continue;
+      const g = new THREE.BoxGeometry(0.14, 1.5, 0.14);
       g.translate(x, 0.75, z);
       posts.push(g);
     }
   }
-  group.add(new THREE.Mesh(mergeGeometries(posts), mats.trunk));
+  const postGeo = posts.reduce((acc, g) => { acc.push(g); return acc; }, []);
+  for (const g of postGeo) group.add(new THREE.Mesh(g, mats.dark));
   const wirePts = [];
   for (const y of [0.6, 1.2]) {
     const c = [[-MAP_HALF, -MAP_HALF], [MAP_HALF, -MAP_HALF], [MAP_HALF, MAP_HALF], [-MAP_HALF, MAP_HALF], [-MAP_HALF, -MAP_HALF]];
-    for (let i = 0; i < 4; i++) wirePts.push(new THREE.Vector3(c[i][0], y, c[i][1]), new THREE.Vector3(c[i + 1][0], y, c[i + 1][1]));
+    for (let i = 0; i < 4; i++) {
+      if (map.id === 'harbor' && c[i][0] > 60 && c[i + 1][0] > 60) continue;
+      wirePts.push(new THREE.Vector3(c[i][0], y, c[i][1]), new THREE.Vector3(c[i + 1][0], y, c[i + 1][1]));
+    }
   }
   group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(wirePts), new THREE.LineBasicMaterial({ color: 0x1a1918 })));
 
-  // 소나무 (교차 빌보드), 포탄 구덩이, 깃발
-  const pineMat = new THREE.MeshBasicMaterial({ map: tex.pine, alphaTest: 0.35, side: THREE.DoubleSide });
-  const splatMats = [0, 1, 2, 3].map((i) => new THREE.MeshBasicMaterial({
-    map: tex[`splat${i}`], color: 0x3a3835, transparent: true, opacity: 0.4, depthWrite: false,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-  }));
+  // 팀 깃발 (펄럭임)
   const banners = [];
+  const bannerMats = [0, 1].map((t) => new THREE.MeshLambertMaterial({ map: bannerTexture(t), side: THREE.DoubleSide }));
   for (const p of map.props) {
-    if (p.kind === 'pine') {
-      const w = p.h * 0.5;
-      for (const rot of [0, Math.PI / 2]) {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, p.h), pineMat);
-        m.position.set(p.x, p.h / 2, p.z);
-        m.rotation.y = rot + p.s * 3;
-        group.add(m);
-      }
-    } else if (p.kind === 'crater') {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(p.r * 2.4, p.r * 2.4), splatMats[Math.floor(p.s * 4)]);
-      m.rotation.set(-Math.PI / 2, 0, p.s * 6.28);
-      m.position.set(p.x, 0.02, p.z);
-      group.add(m);
-    } else if (p.kind === 'banner') {
-      const pole = new THREE.Mesh(boxGeometry(0.12, 6, 0.12), mats.trunk);
-      pole.position.set(p.x, 3, p.z);
-      const cloth = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.2, 8, 1), new THREE.MeshLambertMaterial({ color: TEAM_COLOR[p.team], side: THREE.DoubleSide }));
-      cloth.geometry.translate(1.1, 0, 0);
-      cloth.position.set(p.x + 0.06, 4.3, p.z);
-      group.add(pole, cloth);
-      banners.push(cloth);
-    }
+    if (p.kind !== 'banner') continue;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), mats.dark);
+    pole.position.set(p.x, 3, p.z);
+    pole.castShadow = true;
+    const clothGeo = new THREE.PlaneGeometry(2.2, 3.3, 10, 4);
+    clothGeo.translate(1.1, 0, 0);
+    const cloth = new THREE.Mesh(clothGeo, bannerMats[p.team]);
+    cloth.position.set(p.x + 0.07, 4.2, p.z);
+    cloth.rotation.y = p.team ? Math.PI : 0;
+    cloth.castShadow = true;
+    cloth.userData.base = clothGeo.attributes.position.array.slice();
+    group.add(pole, cloth);
+    banners.push(cloth);
   }
 
-  // 먼 산 (카메라를 따라다니는 원통)
-  const skyGeo = new THREE.CylinderGeometry(460, 460, 170, 64, 1, true);
+  // 먼 산 + 해
   tex.mountains.repeat.set(3, 1);
-  const mountains = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ map: tex.mountains, transparent: true, side: THREE.BackSide, depthWrite: false }));
+  const mountains = new THREE.Mesh(
+    new THREE.CylinderGeometry(460, 460, 170, 64, 1, true),
+    new THREE.MeshBasicMaterial({ map: tex.mountains, transparent: true, side: THREE.BackSide, depthWrite: false, color: theme.snow ? 0xbfc4c8 : 0xffffff }),
+  );
   mountains.renderOrder = -2;
   group.add(mountains);
-  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.sun, depthWrite: false }));
+  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.sun, depthWrite: false, color: theme.snow ? 0x777777 : 0xffffff, opacity: theme.snow ? 0.6 : 1, transparent: true }));
   sunSprite.scale.set(70, 70, 1);
   sunSprite.renderOrder = -3;
   group.add(sunSprite);
   const sunSky = new THREE.Vector3(0.6, 0.26, -0.76).normalize();
 
+  // 눈
+  let snow = null;
+  if (theme.snow) {
+    const N = 2200, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 70;
+      pos[i * 3 + 1] = Math.random() * 30;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 70;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    snow = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9aa3ab, size: 0.09, transparent: true, opacity: 0.9, depthWrite: false }));
+    snow.frustumCulled = false;
+    group.add(snow);
+  }
+
   // 거점 표지 (점령전)
+  const RING = ['#55524d', TEAMS[0].css, TEAMS[1].css];
   const points = map.points.map((P) => {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(P.r - 0.35, P.r, 64), new THREE.MeshBasicMaterial({ color: 0x55524d, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(P.r - 0.35, P.r, 64), new THREE.MeshBasicMaterial({ color: 0x55524d, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(P.x, 0.04, P.z);
-    const pole = new THREE.Mesh(boxGeometry(0.12, 4.5, 0.12), mats.trunk);
+    ring.position.set(P.x, 0.05, P.z);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 4.5, 8), mats.dark);
     pole.position.set(P.x, 2.25, P.z);
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.1), new THREE.MeshLambertMaterial({ color: 0xdedad2, side: THREE.DoubleSide }));
     flag.geometry.translate(0.9, 0, 0);
     flag.position.set(P.x + 0.06, 3.9, P.z);
-    const labels = [labelTexture(P.label, '#55524d', '#151412'), labelTexture(P.label, '#151412', '#151412'), labelTexture(P.label, '#b3301c', '#b3301c')];
+    const labels = RING.map((c) => labelTexture(P.label, c, c));
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labels[0], depthTest: false, transparent: true }));
     label.scale.set(2.6, 2.6, 1);
-    label.position.set(P.x, 6.2, P.z);
+    label.position.set(P.x, 6.4, P.z);
     label.renderOrder = 5;
     const g = new THREE.Group();
     g.add(ring, pole, flag, label);
@@ -157,6 +133,7 @@ export function buildWorld(scene, map) {
   return {
     group,
     points,
+    theme,
     setMode(mode) {
       for (const p of points) p.g.visible = mode === 'dom';
     },
@@ -166,26 +143,51 @@ export function buildWorld(scene, map) {
         const p = points[i];
         if (!p || p.owner === owner) return;
         p.owner = owner;
-        const col = owner === 0 ? TEAM_COLOR[0] : owner === 1 ? TEAM_COLOR[1] : 0xdedad2;
+        const col = owner >= 0 ? TEAMS[owner].hex : 0xdedad2;
         p.flag.material.color.setHex(col);
-        p.ring.material.color.setHex(owner === 0 ? 0x1d1b18 : owner === 1 ? 0xb8331e : 0x55524d);
+        p.ring.material.color.setHex(owner >= 0 ? TEAMS[owner].hex : 0x55524d);
         p.label.material.map = p.labels[owner + 1];
         p.label.material.needsUpdate = true;
       });
     },
-    update(cam, t) {
+    update(cam, t, dt = 0.016) {
       mountains.position.set(cam.position.x, 58, cam.position.z);
       sunSprite.position.copy(cam.position).addScaledVector(sunSky, 520);
-      sun.position.set(cam.position.x + sunDir.x * 120, sunDir.y * 120, cam.position.z + sunDir.z * 120);
+      sun.position.set(cam.position.x + sunDir.x * 140, sunDir.y * 140, cam.position.z + sunDir.z * 140);
       sun.target.position.set(cam.position.x, 0, cam.position.z);
-      for (let i = 0; i < banners.length; i++) banners[i].rotation.y = Math.sin(t * 1.3 + i) * 0.35;
+      for (let i = 0; i < banners.length; i++) {
+        const b = banners[i], pos = b.geometry.attributes.position, base = b.userData.base;
+        for (let v = 0; v < pos.count; v++) {
+          const x = base[v * 3];
+          pos.setZ(v, Math.sin(t * 3 + x * 2.2 + i) * 0.14 * x);
+        }
+        pos.needsUpdate = true;
+      }
       for (const p of points) p.flag.rotation.y = Math.sin(t * 1.7 + p.P.x) * 0.4;
+      if (snow) {
+        const pos = snow.geometry.attributes.position;
+        snow.position.set(Math.round(cam.position.x / 70) * 0, 0, 0);
+        for (let i = 0; i < pos.count; i++) {
+          let x = pos.getX(i), y = pos.getY(i) - dt * (1.2 + (i % 7) * 0.12), z = pos.getZ(i);
+          x += Math.sin(t + i) * dt * 0.4;
+          if (y < 0) y += 30;
+          if (x - cam.position.x > 35) x -= 70; else if (x - cam.position.x < -35) x += 70;
+          if (z - cam.position.z > 35) z -= 70; else if (z - cam.position.z < -35) z += 70;
+          pos.setXYZ(i, x, y, z);
+        }
+        pos.needsUpdate = true;
+      }
     },
     dispose() {
       scene.remove(group);
       group.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
-        if (o.material) o.material.dispose();
+        if (o.material) {
+          for (const m of [].concat(o.material)) {
+            if (m.map && m.map.isCanvasTexture) m.map.dispose();
+            m.dispose();
+          }
+        }
       });
     },
   };

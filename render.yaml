@@ -1,0 +1,9 @@
+# Render.com 에서 게임 서버를 무료로 켜 두는 설정 (New → Blueprint 로 이 저장소를 선택)
+services:
+  - type: web
+    name: mukjeon
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz

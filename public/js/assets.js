@@ -1,10 +1,16 @@
-// 이미지 에셋 로딩 + 공용 재질/도형 도구
+// 이미지 에셋 로딩 + 캔버스로 그리는 표지·이름표·지도 썸네일
 import * as THREE from 'three';
+import { TEAMS, MAP_HALF } from '../shared/config.js';
 
-const TEX = ['paper', 'ground', 'wall', 'ruin', 'sandbag', 'crate', 'metal', 'splat0', 'splat1', 'splat2', 'splat3', 'smoke', 'stroke', 'mountains', 'sun', 'pine'];
+const TEX = [
+  'paper', 'ground', 'wall', 'ruin', 'sandbag', 'crate', 'metal', 'splat0', 'splat1', 'splat2', 'splat3', 'smoke', 'stroke',
+  'mountains', 'sun', 'pine', 'tile', 'thatch', 'wood', 'container', 'bambooleaf', 'snowfield', 'paving', 'water',
+];
 const UI = ['enso', 'seal'];
+const REPEAT = ['ground', 'wall', 'ruin', 'sandbag', 'metal', 'tile', 'thatch', 'wood', 'container', 'snowfield', 'paving', 'water'];
 export const tex = {};
 export const img = {};
+export const TEAM_COLOR = TEAMS.map((t) => t.hex);
 
 export async function loadAssets(onProgress) {
   const loader = new THREE.TextureLoader();
@@ -20,58 +26,21 @@ export async function loadAssets(onProgress) {
       im.src = `assets/ui/${name}.svg`;
     })),
   ]);
-  for (const n of ['ground', 'wall', 'ruin', 'sandbag', 'metal']) {
+  for (const n of REPEAT) {
     tex[n].wrapS = tex[n].wrapT = THREE.RepeatWrapping;
-    tex[n].anisotropy = 4;
+    tex[n].anisotropy = 8;
   }
   tex.mountains.wrapS = THREE.RepeatWrapping;
   return tex;
 }
 
-// 면마다 월드 크기에 맞춰 UV 를 늘린 박스 (tw x th 미터마다 텍스처 1장)
-export function boxGeometry(w, h, d, tw, th) {
-  const g = new THREE.BoxGeometry(w, h, d);
-  if (!tw) return g;
-  const uv = g.attributes.uv;
-  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
-  for (let f = 0; f < 6; f++) {
-    for (let v = 0; v < 4; v++) {
-      const i = f * 4 + v;
-      uv.setXY(i, (uv.getX(i) * dims[f][0]) / tw, (uv.getY(i) * dims[f][1]) / th);
-    }
-  }
-  return g;
-}
+const canvasTex = (c) => {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+};
 
-// 같은 속성(position/normal/uv + index)을 가진 도형들을 하나로 합친다
-export function mergeGeometries(list) {
-  let vCount = 0, iCount = 0;
-  for (const g of list) { vCount += g.attributes.position.count; iCount += g.index.count; }
-  const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3), uv = new Float32Array(vCount * 2);
-  const index = new Uint32Array(iCount);
-  let vo = 0, io = 0;
-  for (const g of list) {
-    pos.set(g.attributes.position.array, vo * 3);
-    nor.set(g.attributes.normal.array, vo * 3);
-    uv.set(g.attributes.uv.array, vo * 2);
-    const src = g.index.array;
-    for (let i = 0; i < src.length; i++) index[io + i] = src[i] + vo;
-    vo += g.attributes.position.count;
-    io += src.length;
-    g.dispose();
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  out.setIndex(new THREE.BufferAttribute(index, 1));
-  out.computeBoundingSphere();
-  return out;
-}
-
-export const TEAM_COLOR = [0x2a2825, 0xb8331e];
-
-// 캔버스에 원상 + 한자 한 글자를 그린 표지 텍스처
+// 원상 + 한자 한 글자 표지
 export function labelTexture(glyph, ringColor = '#151412', textColor = '#151412', size = 256) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -88,9 +57,37 @@ export function labelTexture(glyph, ringColor = '#151412', textColor = '#151412'
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(glyph, size / 2, size / 2 + size * 0.03);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.NoColorSpace;
-  return t;
+  return canvasTex(c);
+}
+
+// 팀 깃발 천 (팀 색 바탕 + 흰 원상 + 한자)
+export function bannerTexture(team) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 384;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = TEAMS[team].css;
+  ctx.fillRect(0, 0, 256, 384);
+  ctx.fillStyle = 'rgba(255,255,255,.08)';
+  for (let y = 0; y < 384; y += 6) ctx.fillRect(0, y, 256, 2);
+  if (img.enso) {
+    const s = document.createElement('canvas');
+    s.width = s.height = 200;
+    const sc = s.getContext('2d');
+    sc.drawImage(img.enso, 0, 0, 200, 200);
+    sc.globalCompositeOperation = 'source-in';
+    sc.fillStyle = '#efe7d6';
+    sc.fillRect(0, 0, 200, 200);
+    ctx.drawImage(s, 28, 92);
+  }
+  ctx.fillStyle = '#efe7d6';
+  ctx.font = "120px 'Song Myung', 'Batang', serif";
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(TEAMS[team].hanja, 128, 198);
+  ctx.fillStyle = '#b3301c';
+  ctx.fillRect(196, 330, 40, 40);
+  return canvasTex(c);
 }
 
 export function nameTexture(name, color) {
@@ -106,7 +103,65 @@ export function nameTexture(name, color) {
   ctx.strokeText(name, 128, 26);
   ctx.fillStyle = color;
   ctx.fillText(name, 128, 26);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.NoColorSpace;
-  return t;
+  return canvasTex(c);
+}
+
+// 위에서 내려다본 수묵 지도 (투표 카드, 미니맵 공용)
+export function drawMap(ctx, map, size, { points = true, spawns = true } = {}) {
+  const k = size / (MAP_HALF * 2);
+  ctx.save();
+  ctx.scale(k, k);
+  ctx.translate(MAP_HALF, MAP_HALF);
+  ctx.fillStyle = map.id === 'snow' ? '#f4f3ef' : '#e8dfca';
+  ctx.fillRect(-MAP_HALF, -MAP_HALF, MAP_HALF * 2, MAP_HALF * 2);
+  for (const p of map.props) {
+    if (p.kind === 'pond' || p.kind === 'paddy' || p.kind === 'sea') {
+      ctx.fillStyle = 'rgba(80,92,104,.28)';
+      if (p.kind === 'pond') { ctx.beginPath(); ctx.ellipse(p.x, p.z, p.rx, p.rz, 0, 0, Math.PI * 2); ctx.fill(); }
+      else if (p.kind === 'paddy') ctx.fillRect(p.x - p.w / 2 + 0.4, p.z - p.d / 2 + 0.4, p.w - 0.8, p.d - 0.8);
+      else ctx.fillRect(p.x, -MAP_HALF, MAP_HALF, MAP_HALF * 2);
+    } else if (p.kind === 'paving') {
+      ctx.fillStyle = 'rgba(27,26,24,.08)';
+      ctx.fillRect(p.x - p.w / 2, p.z - p.d / 2, p.w, p.d);
+    }
+  }
+  for (const b of map.boxes) {
+    const h = b.max[1] - b.min[1];
+    if (b.max[1] < 0.9 || b.noShoot || b.min[1] > 2) continue;
+    ctx.fillStyle = h > 4.5 ? 'rgba(27,26,24,0.85)' : h > 2 ? 'rgba(27,26,24,0.55)' : 'rgba(27,26,24,0.3)';
+    ctx.fillRect(b.min[0], b.min[2], b.max[0] - b.min[0], b.max[2] - b.min[2]);
+  }
+  if (spawns) {
+    for (const t of [0, 1]) {
+      ctx.fillStyle = TEAMS[t].css;
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(-46, (t ? 1 : -1) * 70 - 1.5, 92, 3);
+      ctx.globalAlpha = 1;
+    }
+  }
+  if (points) {
+    for (const P of map.points) {
+      ctx.beginPath();
+      ctx.arc(P.x, P.z, P.r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#b3301c';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = 'rgba(27,26,24,0.7)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-MAP_HALF, -MAP_HALF, MAP_HALF * 2, MAP_HALF * 2);
+  ctx.restore();
+}
+
+const thumbCache = new Map();
+export function mapThumb(map, size = 320) {
+  const key = `${map.id}:${map.seed}:${size}`;
+  if (thumbCache.has(key)) return thumbCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  drawMap(c.getContext('2d'), map, size);
+  const url = c.toDataURL('image/png');
+  thumbCache.set(key, url);
+  return url;
 }
