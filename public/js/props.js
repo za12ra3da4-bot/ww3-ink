@@ -23,7 +23,7 @@ export function B(w, h, d, tw = 0, th = tw) {
   return g;
 }
 const C = (rt, rb, h, seg = 10, open = false, ts = 0, tl = PI * 2) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, open, ts, tl);
-const S = (r, ws = 10, hs = 8) => new THREE.SphereGeometry(r, ws, hs);
+const S = (r, ws = 10, hs = 8, ps = 0, pl = PI * 2, ts = 0, tl = PI) => new THREE.SphereGeometry(r, ws, hs, ps, pl, ts, tl);
 const Cone = (r, h, seg = 12, open = false) => new THREE.ConeGeometry(r, h, seg, 1, open);
 const Ico = (r, detail = 0) => new THREE.IcosahedronGeometry(r, detail);
 const Dode = (r) => new THREE.DodecahedronGeometry(r, 0);
@@ -73,7 +73,7 @@ export function makeMaterials() {
     map: tex[`splat${i}`], color, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
   return {
-    wall: lam(0xe6e2da, tex.wall), ruin: lam(0xd4cfc5, tex.ruin), concrete: lam(0xcfcac0, tex.ruin), stone: lam(0xbcb7ad, tex.ruin),
+    wall: lam(0xe2ddd3, tex.ruin), ruin: lam(0xd4cfc5, tex.ruin), concrete: lam(0xcfcac0, tex.ruin), stone: lam(0xbcb7ad, tex.ruin),
     plaster: lam(0xf0ece2, tex.ruin), mud: lam(0xd6ccb8, tex.ruin), earth: lam(0x8f887c, tex.ruin), snowearth: lam(0xf2f2f0, tex.snowfield),
     dark: lam(0x2b2a28), iron: lam(0x4a4946, tex.metal), olive: lam(0x7b7c70, tex.metal), metal: lam(0x96948e, tex.metal),
     shed: lam(0xb8b6b0, tex.container), sandbag: lam(0xcac3b3, tex.sandbag), crate: lam(0xbfb6a6, tex.crate),
@@ -87,6 +87,11 @@ export function makeMaterials() {
     water: new THREE.MeshLambertMaterial({ color: 0x59616a, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
     paddy: new THREE.MeshLambertMaterial({ color: 0xa3a7a6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
     rice: lam(0x7e8a6c),
+    asphalt: lam(0x8c8a86, tex.asphalt, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+    paint: new THREE.MeshLambertMaterial({ color: 0xe8e4da, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
+    grass: new THREE.MeshLambertMaterial({ color: 0x7f8a6c, map: tex.grass, alphaTest: 0.35, side: THREE.DoubleSide }),
+    puddle: new THREE.MeshPhongMaterial({ color: 0x3c4148, shininess: 120, specular: 0x9aa4ad, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    brick: lam(0x8a6a58, tex.ruin), trim: lam(0xb7b1a6, tex.ruin),
     containers: [lam(0x8e4d3c, tex.container), lam(0x40607a, tex.container), lam(0x6b7657, tex.container), lam(0xb4a98d, tex.container)],
     team: [lam(0x2a2825, null, DS), lam(0x2c5d8f, null, DS)],
     splats: [0, 1, 2, 3].map((i) => splat(i, 0x55524d, 0.22)),
@@ -117,7 +122,7 @@ class Batch {
         if (!merged) return;
         merged.computeBoundingSphere();
         const mesh = new THREE.Mesh(merged, mat);
-        const decal = mat.transparent || name === 'paving' || name === 'water' || name === 'paddy';
+        const decal = mat.transparent || ['paving', 'water', 'paddy', 'asphalt', 'paint', 'puddle', 'grass'].includes(name);
         mesh.castShadow = !decal;
         mesh.receiveShadow = true;
         if (mat.transparent) mesh.renderOrder = 1;
@@ -323,6 +328,39 @@ const DRAW = {
   roof(put, p) {
     const r = prng(p.s);
     const { w, d, h } = p;
+    const y0 = p.y0 || 0;
+    const floors = Math.max(1, Math.floor((h - y0 - 0.4) / 3.2));
+    const faces = [[0, d / 2, w, 0], [0, -d / 2, w, PI], [w / 2, 0, d, PI / 2], [-w / 2, 0, d, -PI / 2]];
+    faces.forEach(([fx, fz, L, ang], fi) => {
+      const nx = Math.sin(ang), nz = Math.cos(ang), tx = Math.cos(ang), tz = -Math.sin(ang);
+      const cols = Math.max(1, Math.floor(L / 3));
+      for (let f = 0; f < floors; f++) {
+        const base = y0 + f * 3.2;
+        if (f > 0) put('trim', B(L + 0.3, 0.18, 0.16), fx + nx * 0.08, base, fz + nz * 0.08, 0, ang, 0);
+        for (let c = 0; c < cols; c++) {
+          const off = (c - (cols - 1) / 2) * (L / cols);
+          const px = fx + tx * off, pz = fz + tz * off;
+          if (y0 === 0 && f === 0 && fi === 0 && c === Math.floor(cols / 2)) {
+            put('dark', B(1.5, 2.4, 0.06), px + nx * 0.02, base + 1.2, pz + nz * 0.02, 0, ang, 0);
+            put('trim', B(1.9, 0.25, 0.3), px + nx * 0.15, base + 2.55, pz + nz * 0.15, 0, ang, 0);
+            continue;
+          }
+          const roll = r();
+          if (roll < 0.06) continue;
+          const y = base + 1.75;
+          put(roll < 0.35 ? 'dark' : 'glass', B(1.1, 1.45, 0.04), px + nx * 0.02, y, pz + nz * 0.02, 0, ang, 0);
+          put('trim', B(1.34, 0.1, 0.12), px + nx * 0.06, y + 0.77, pz + nz * 0.06, 0, ang, 0);
+          put('trim', B(1.44, 0.09, 0.26), px + nx * 0.12, y - 0.78, pz + nz * 0.12, 0, ang, 0);
+          for (const sd of [-1, 1]) put('trim', B(0.1, 1.45, 0.12), px + tx * sd * 0.62 + nx * 0.06, y, pz + tz * sd * 0.62 + nz * 0.06, 0, ang, 0);
+          if (roll > 0.35 && roll < 0.5) put('dark', B(0.04, 1.4, 0.02), px + nx * 0.05, y, pz + nz * 0.05, 0, ang, 0);
+          if (f > 0 && roll > 0.9) {
+            put('concrete', B(1.9, 0.14, 0.9), px + nx * 0.45, base + 0.95, pz + nz * 0.45, 0, ang, 0);
+            put('iron', B(1.9, 0.9, 0.05), px + nx * 0.88, base + 1.45, pz + nz * 0.88, 0, ang, 0);
+          }
+        }
+      }
+      put('trim', B(L + 0.2, 0.3, 0.2), fx + nx * 0.1, y0 + 0.15, fz + nz * 0.1, 0, ang, 0);
+    });
     for (const s of [-1, 1]) {
       put('concrete', B(w, 0.6, 0.25, 3), 0, h + 0.3, s * (d / 2 - 0.125));
       put('concrete', B(0.25, 0.6, d, 3), s * (w / 2 - 0.125), h + 0.3, 0);
@@ -339,6 +377,47 @@ const DRAW = {
     put('dark', B(1.6, 0.5, 0.06), 0, 0.7, -1.73);
   },
   banner() { /* world.js 에서 따로 그림 (펄럭임) */ },
+  road(put, p) {
+    const g = new THREE.PlaneGeometry(p.w, p.d);
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * p.w) / 8, (uv.getY(i) * p.d) / 8);
+    put('asphalt', g, 0, 0.012, 0, -PI / 2);
+  },
+  dash(put, p) {
+    put('paint', new THREE.PlaneGeometry(p.w, p.d), 0, 0.02, 0, -PI / 2);
+  },
+  curb(put, p) {
+    put('trim', B(p.len, 0.14, 0.26, 2), 0, 0.07, 0);
+  },
+  tuft(put, p) {
+    const h = p.h, w = h * 1.3;
+    for (let k = 0; k < 3; k++) put('grass', new THREE.PlaneGeometry(w, h), 0, h / 2, 0, 0, p.s * 6 + (k * PI) / 3, 0);
+    if (p.snow) put('snow', S(h * 0.4, 6, 4), 0, 0.05, 0, 0, 0, 0, 1.6, 0.35, 1.6);
+  },
+  debris(put, p) {
+    const r = prng(p.s);
+    for (let i = 0; i < 4 + Math.floor(r() * 5); i++) {
+      const kind = r();
+      const x = (r() - 0.5) * 1.4, z = (r() - 0.5) * 1.4;
+      if (kind < 0.45) put('brick', B(0.22, 0.07, 0.11), x, 0.035, z, 0, r() * PI, (r() - 0.5) * 0.4);
+      else if (kind < 0.7) put('ruin', Dode(0.08 + r() * 0.12), x, 0.06, z, r(), r(), r(), 1, 0.6, 1);
+      else if (kind < 0.85) put('hanji', new THREE.PlaneGeometry(0.22, 0.3), x, 0.015, z, -PI / 2, 0, r() * PI);
+      else put('iron', C(0.02, 0.02, 0.5 + r() * 0.6, 5), x, 0.03, z, 0, r() * PI, PI / 2);
+    }
+  },
+  pebbles(put, p) {
+    const r = prng(p.s);
+    for (let i = 0; i < 3 + Math.floor(r() * 4); i++) {
+      const sz = 0.06 + r() * 0.16;
+      put(p.snow ? 'snow' : 'stone', Dode(sz), (r() - 0.5) * 0.9, sz * 0.4, (r() - 0.5) * 0.9, r(), r(), r(), 1.2, 0.6, 1);
+    }
+  },
+  puddle(put, p) {
+    put('puddle', new THREE.CircleGeometry(1, 20), 0, 0.022, 0, -PI / 2, 0, 0, p.r, p.r * 0.65, 1);
+  },
+  drift(put, p) {
+    put('snow', S(p.r, 12, 6, 0, PI * 2, 0, PI / 2), 0, -0.05, 0, 0, 0, 0, 1.5, 0.28, 1);
+  },
 
   // ── 궁궐 ──
   hall(put, p) {
@@ -710,7 +789,7 @@ const DRAW = {
 };
 
 // map.boxes 중 m(재질)이 있는 상자 → 텍스처 크기
-const BOX_TEX = { wall: [8, 6.4], ruin: [4, 4], concrete: [4, 4], stone: [3, 3], wood: [2, 2], plaster: [3, 3] };
+const BOX_TEX = { wall: [4, 4], ruin: [4, 4], concrete: [4, 4], stone: [3, 3], wood: [2, 2], plaster: [3, 3] };
 
 export function buildProps(group, map) {
   const mats = makeMaterials();

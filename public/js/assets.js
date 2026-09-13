@@ -4,10 +4,10 @@ import { TEAMS, MAP_HALF } from '../shared/config.js';
 
 const TEX = [
   'paper', 'ground', 'wall', 'ruin', 'sandbag', 'crate', 'metal', 'splat0', 'splat1', 'splat2', 'splat3', 'smoke', 'stroke',
-  'mountains', 'sun', 'pine', 'tile', 'thatch', 'wood', 'container', 'bambooleaf', 'snowfield', 'paving', 'water',
+  'mountains', 'sun', 'pine', 'tile', 'thatch', 'wood', 'container', 'bambooleaf', 'snowfield', 'paving', 'water', 'grass', 'asphalt',
 ];
 const UI = ['enso', 'seal'];
-const REPEAT = ['ground', 'wall', 'ruin', 'sandbag', 'metal', 'tile', 'thatch', 'wood', 'container', 'snowfield', 'paving', 'water'];
+const REPEAT = ['ground', 'wall', 'ruin', 'sandbag', 'metal', 'tile', 'thatch', 'wood', 'container', 'snowfield', 'paving', 'water', 'asphalt'];
 export const tex = {};
 export const img = {};
 export const TEAM_COLOR = TEAMS.map((t) => t.hex);

@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { tex, labelTexture, bannerTexture } from './assets.js';
 import { buildProps } from './props.js';
+import { decorate } from './decor.js';
+import { World } from '../shared/physics.js';
 import { MAP_HALF, TEAMS } from '../shared/config.js';
 import { THEMES } from '../shared/map.js';
 
@@ -33,7 +35,8 @@ export function buildWorld(scene, map, ink) {
   group.add(ground);
 
   // 소품 + 재질 상자
-  const { mats } = buildProps(group, map);
+  const world = new World(map.boxes);
+  const { mats } = buildProps(group, { ...map, props: [...map.props, ...decorate(map, world)] });
 
   // 경계 철조망
   const posts = [];
