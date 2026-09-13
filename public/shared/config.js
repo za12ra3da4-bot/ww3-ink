@@ -70,12 +70,15 @@ export const PROJECTILES = {
   nuke: { icon: 's_nuke' },
 };
 
+// 모든 병과가 1 주무기 · 2 권총 · 3 로켓포 를 든다 (rockets = 로켓 수)
 export const CLASSES = [
-  { id: 'rifleman', name: '소총수', desc: '어느 거리에서나 믿음직한 자동소총', primary: 'rifle', secondary: 'pistol', grenades: 2, speed: 1.0 },
-  { id: 'marksman', name: '저격수', desc: '한 발에 한 명. 머리를 노려라', primary: 'sniper', secondary: 'pistol', grenades: 1, speed: 0.95 },
-  { id: 'breacher', name: '돌격병', desc: '근접전의 지배자. 빠른 발', primary: 'shotgun', secondary: 'pistol', grenades: 3, speed: 1.1 },
-  { id: 'rocketeer', name: '포병', desc: '기관단총과 로켓포로 엄폐물째 날린다', primary: 'smg', secondary: 'rocket', grenades: 1, speed: 0.95 },
+  { id: 'rifleman', name: '소총수', desc: '어느 거리에서나 믿음직한 자동소총', primary: 'rifle', secondary: 'pistol', rockets: 2, grenades: 2, speed: 1.0 },
+  { id: 'marksman', name: '저격수', desc: '한 발에 한 명. 머리를 노려라', primary: 'sniper', secondary: 'pistol', rockets: 1, grenades: 1, speed: 0.95 },
+  { id: 'breacher', name: '돌격병', desc: '근접전의 지배자. 빠른 발', primary: 'shotgun', secondary: 'pistol', rockets: 1, grenades: 3, speed: 1.1 },
+  { id: 'rocketeer', name: '포병', desc: '기관단총 + 로켓 6발로 엄폐물째 날린다', primary: 'smg', secondary: 'pistol', rockets: 6, grenades: 1, speed: 0.95 },
 ];
+for (const c of CLASSES) c.weapons = [c.primary, c.secondary, 'rocket'];
+export const SLOT_KEYS = ['primary', 'secondary', 'launcher'];
 
 export const STREAKS = [
   { id: 'uav', kills: 2, name: '정찰기', desc: '20초간 모든 적 위치를 지도에 표시', duration: 20 },
@@ -161,6 +164,24 @@ export const SKIN_STYLES = [
   { id: 'shadow', name: '야행', rarity: 'epic', pattern: 'shadow', body: '#151517', accent: '#c93a28', sound: 'silent', tracer: '#c93a28' },
   { id: 'phoenix', name: '황금 봉황', rarity: 'legendary', pattern: 'gold', body: '#d6ab3c', accent: '#9c291d', sound: 'phoenix', shiny: true, tracer: '#e8b83e' },
   { id: 'raijin', name: '뇌신', rarity: 'legendary', pattern: 'lightning', body: '#1c2142', accent: '#72e2ff', sound: 'laser', shiny: true, tracer: '#72e2ff' },
+  { id: 'digital', name: '디지털 위장', rarity: 'common', pattern: 'digital', body: '#7b7d6f', accent: '#3b3d33', sound: 'tactical' },
+  { id: 'arctic', name: '극지 위장', rarity: 'common', pattern: 'digital', body: '#e2e4e2', accent: '#8d9296', sound: 'crisp' },
+  { id: 'rust', name: '녹슨 강철', rarity: 'common', pattern: 'rust', body: '#6e5a4c', accent: '#a4552c', sound: 'rusty' },
+  { id: 'hanji', name: '한지', rarity: 'common', pattern: 'hanji', body: '#e9dfc9', accent: '#2a2622', sound: 'brush' },
+  { id: 'hangul', name: '한글', rarity: 'rare', pattern: 'hangul', body: '#efe6d2', accent: '#1d1b18', sound: 'brush' },
+  { id: 'magpie', name: '까치', rarity: 'rare', pattern: 'magpie', body: '#151618', accent: '#3b6fb0', sound: 'feather', tracer: '#3b6fb0' },
+  { id: 'goryeo', name: '고려청자', rarity: 'rare', pattern: 'crackle', body: '#8fb5a2', accent: '#f0efe6', sound: 'jade', tracer: '#8fd0b2' },
+  { id: 'neon', name: '네온 서울', rarity: 'rare', pattern: 'neon', body: '#120f1c', accent: '#ff3fb4', sound: 'synth', tracer: '#ff3fb4', shiny: true },
+  { id: 'tiger', name: '호랑이', rarity: 'rare', pattern: 'tiger', body: '#d98a2e', accent: '#1a1410', sound: 'beast' },
+  { id: 'dancheong', name: '단청', rarity: 'epic', pattern: 'dancheong', body: '#2f6f5e', accent: '#c23b2a', sound: 'temple', tracer: '#e0503a' },
+  { id: 'dokkaebi', name: '도깨비불', rarity: 'epic', pattern: 'wisp', body: '#0c1220', accent: '#4fd0ff', sound: 'spirit', tracer: '#4fd0ff', shiny: true },
+  { id: 'najeon', name: '나전칠기', rarity: 'epic', pattern: 'pearl', body: '#0d0d10', accent: '#bfe8e4', sound: 'shimmer', tracer: '#d6f2ee', shiny: true },
+  { id: 'lava', name: '용암', rarity: 'epic', pattern: 'lava', body: '#1b1412', accent: '#ff6a1a', sound: 'magma', tracer: '#ff7a2a', shiny: true },
+  { id: 'galaxy', name: '은하수', rarity: 'epic', pattern: 'galaxy', body: '#120d2a', accent: '#b58cff', sound: 'cosmic', tracer: '#c9a8ff', shiny: true },
+  { id: 'baekho', name: '백호', rarity: 'legendary', pattern: 'whitetiger', body: '#f2f1ec', accent: '#5ab6ff', sound: 'roar', shiny: true, tracer: '#7cc6ff' },
+  { id: 'jujak', name: '주작', rarity: 'legendary', pattern: 'flame', body: '#8e1b12', accent: '#ffb02e', sound: 'flame', shiny: true, tracer: '#ff8a2a' },
+  { id: 'hyeonmu', name: '현무', rarity: 'legendary', pattern: 'hexshell', body: '#101a1a', accent: '#39e0b8', sound: 'abyss', shiny: true, tracer: '#39e0b8' },
+  { id: 'taegeuk', name: '태극', rarity: 'legendary', pattern: 'taegeuk', body: '#f4f1ea', accent: '#c8102e', sound: 'harmony', shiny: true, tracer: '#e8e4ff' },
 ];
 
 export const SKINS = {};

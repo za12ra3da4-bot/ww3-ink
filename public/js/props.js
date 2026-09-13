@@ -89,7 +89,7 @@ export function makeMaterials() {
     rice: lam(0x7e8a6c),
     containers: [lam(0x8e4d3c, tex.container), lam(0x40607a, tex.container), lam(0x6b7657, tex.container), lam(0xb4a98d, tex.container)],
     team: [lam(0x2a2825, null, DS), lam(0x2c5d8f, null, DS)],
-    splats: [0, 1, 2, 3].map((i) => splat(i, 0x3a3835, 0.42)),
+    splats: [0, 1, 2, 3].map((i) => splat(i, 0x55524d, 0.22)),
   };
 }
 

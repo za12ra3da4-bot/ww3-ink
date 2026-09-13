@@ -2,6 +2,24 @@
 import * as THREE from 'three';
 import { io } from '../vendor/socket.io.esm.min.js';
 import { CLASSES, MODES, TEAMS, STREAKS, WEAPONS, PLAYER, SKINS, MAPS, MAP_IDS, defaultSkin } from '../shared/config.js';
+
+const CLASS_BY_ID = Object.fromEntries(CLASSES.map((c) => [c.id, c]));
+// 이 방에서 들릴 총소리를 미리 합성해 둔다
+function prewarmSounds() {
+  const jobs = new Map();
+  const addFor = (cls, skins) => {
+    const C = CLASS_BY_ID[cls];
+    if (!C) return;
+    for (const w of C.weapons) {
+      const sk = SKINS[(skins && skins[w]) || defaultSkin(w)];
+      jobs.set(`${w}|${sk ? sk.sound : 'classic'}`, [w, sk ? sk.sound : 'classic']);
+    }
+  };
+  addFor(game.cls, game.profile && Object.fromEntries(WEAPON_KEYS.map((w) => [w, game.skinFor(w)])));
+  for (const r of game.roster.values()) addFor(r.cls, r.sk);
+  sound.prewarm([...jobs.values()]);
+}
+const WEAPON_KEYS = Object.keys(WEAPONS);
 import { generateMap } from '../shared/map.js';
 import { World, rayPlayer } from '../shared/physics.js';
 import { InkRenderer } from './ink.js';
@@ -92,16 +110,27 @@ const netStatus = (text, cls) => {
 };
 netStatus('서버 연결 중…', 'wait');
 socket.on('connect', () => {
+  $('serverSetup').hidden = true;
   netStatus(serverUrl ? `서버 연결됨 · ${serverUrl}` : '서버 연결됨', 'ok');
   socket.emit('hello', { token: getToken(), backup }, (res) => { if (res && res.ok) setProfile(res.profile); });
 });
 socket.on('connect_error', (err) => {
   const vercel = /vercel\.app$/.test(location.hostname) && !serverUrl;
+  if (vercel || serverUrl) $('serverSetup').hidden = false;
   netStatus(vercel
     ? '게임 서버 주소가 없습니다 — 설정에서 서버 주소(예: Render)를 넣으세요'
     : `서버 연결 실패 (${err.message}) — 주소와 방장 PC 방화벽을 확인하세요`, 'bad');
 });
 socket.io.on('reconnect_attempt', (n) => netStatus(`서버에 다시 연결하는 중… (${n}번째)`, 'wait'));
+
+$('serverSetupInput').value = serverUrl;
+$('serverSetupBtn').addEventListener('click', () => {
+  let url = $('serverSetupInput').value.trim().replace(/\/+$/, '');
+  if (url && !/^https?:\/\//.test(url)) url = `https://${url}`;
+  settings.server = url;
+  store.set('mukjeon.settings', JSON.stringify(settings));
+  location.reload();
+});
 
 // ── 로비 ─────────────────────────────────────────
 $('nameInput').value = store.get('name', '');
@@ -362,6 +391,7 @@ socket.on('spawn', (m) => {
   if (!game.world) return;
   player.spawn(m);
   game.meHp = PLAYER.maxHp;
+  prewarmSounds();
   $('deathScreen').hidden = true;
   hud.streaks(player);
   sound.play('spawn');
@@ -438,7 +468,7 @@ socket.on('reward', (m) => {
   if (!s) return;
   if (!player.rewards.includes(m.id)) player.rewards.push(m.id);
   hud.streaks(player);
-  hud.announce(`${s.name} 준비 완료`, `[${STREAKS.indexOf(s) + 3}] 키를 눌러 사용 — ${s.desc}`);
+  hud.announce(`${s.name} 준비 완료`, `[${STREAKS.indexOf(s) + 4}] 키를 눌러 사용 — ${s.desc}`);
   sound.play('gong');
 });
 
@@ -676,6 +706,7 @@ function frame() {
   for (const s of game.soldiers.values()) s.update(rt, dt, game.time);
   updateTags();
   game.worldView.update(game.camera, game.time, dt);
+  sound.listen(game.camera.position.x, game.camera.position.y, game.camera.position.z, player.alive ? player.yaw : game.camera.rotation.y);
   game.fx.update(dt);
   game.hurtFx = Math.max(0, game.hurtFx - dt * 0.8);
   game.flash = Math.max(0, game.flash - dt * 0.9);

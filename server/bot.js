@@ -272,7 +272,7 @@ export class BotBrain {
       this.burstUntil = now + 0.25 + Math.random() * 0.9 * D.burst;
       this.pauseUntil = this.burstUntil + (1 - D.burst) * (0.25 + Math.random() * 0.7);
       // 포병: 가끔 로켓
-      if (CLS[e.cls].secondary === 'rocket' && dist > 10 && dist < 55 && now - e.lastRocketAt > 5 && Math.random() < 0.3) {
+      if (e.cls === 'rocketeer' && dist > 10 && dist < 55 && now - e.lastRocketAt > 5 && Math.random() < 0.3) {
         e.lastRocketAt = now;
         e.lastShotAt = now;
         launch(room, e, 'rocket', eye, dirOf(e.yaw + gauss() * D.aimErr, e.pitch + gauss() * D.aimErr * 0.5));

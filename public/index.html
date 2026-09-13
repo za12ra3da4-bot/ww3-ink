@@ -91,6 +91,11 @@
 
     <p id="menuError" class="error"></p>
     <p id="netStatus" class="net"></p>
+    <div id="serverSetup" class="server-setup" hidden>
+      <b>게임 서버 주소를 넣어 주세요</b>
+      <p>이 페이지(Vercel)에는 게임 서버가 없습니다. Render 에 올린 서버 주소나 방장 PC 주소를 넣으면 방 만들기 · 뽑기 · 스킨 장착이 됩니다.</p>
+      <div class="ss-row"><input id="serverSetupInput" placeholder="https://mukjeon.onrender.com"><button id="serverSetupBtn" class="brush-btn small">연 결</button></div>
+    </div>
   </div>
 
   <div id="stage" class="stage"><span class="stage-hint">끌어서 돌려 보기</span></div>
@@ -104,13 +109,16 @@
 
 <!-- 뽑기 연출 -->
 <div id="gachaFx" class="gfx" hidden>
+  <canvas id="gfxParticles" class="gfx-particles"></canvas>
   <div class="gfx-rays"></div>
-  <div class="gfx-ink"></div>
+  <div class="gfx-stroke"></div>
+  <div class="gfx-flash"></div>
   <div id="gfxStage" class="gfx-stage"></div>
   <div id="gfxActions" class="gfx-actions" hidden>
     <button id="gfxAgain" class="brush-btn">한 번 더</button>
     <button id="gfxClose" class="link-btn">닫기</button>
   </div>
+  <p id="gfxSkip" class="gfx-skip" hidden>화면을 누르면 건너뜁니다</p>
 </div>
 
 <!-- 설정 창 -->
@@ -147,6 +155,7 @@
   <div id="streaks"></div>
 
   <div id="weaponBox">
+    <div id="weaponSlots" class="weapon-slots"></div>
     <img id="weaponIcon" src="assets/ui/w_rifle.svg" alt="">
     <div class="wrow"><span id="weaponName">소총</span><span id="ammo"><b id="ammoMag">30</b><i>/</i><em id="ammoRes">150</em></span></div>
     <div class="wrow sub"><span id="reloadHint"></span><span id="grenadeBox"><img src="assets/ui/w_grenade.svg" alt=""><b id="grenadeCount">2</b></span></div>

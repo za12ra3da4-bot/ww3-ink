@@ -25,7 +25,8 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 const app = express();
-app.use(express.static(path.join(__dirname, 'public')));
+// 코드가 바뀌면 브라우저가 옛 파일을 쓰지 않도록 매번 확인하게 한다
+app.use(express.static(path.join(__dirname, 'public'), { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 app.get('/healthz', (_req, res) => res.send('ok'));
 
 const server = http.createServer(app);

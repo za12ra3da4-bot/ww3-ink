@@ -70,6 +70,13 @@ export class HUD {
     $('ammo').classList.toggle('empty', c.mag === 0);
     $('reloadHint').textContent = p.reloading ? '재장전 중…' : c.mag <= Math.ceil(W.mag * 0.25) ? (c.reserve > 0 ? 'R 재장전' : '탄약 없음') : '';
     $('grenadeCount').textContent = p.grenades;
+    const slots = [['primary', '1'], ['secondary', '2'], ['launcher', '3']];
+    $('weaponSlots').innerHTML = slots.map(([k, key]) => {
+      const it = p.inv && p.inv[k];
+      if (!it) return '';
+      const empty = it.mag + it.reserve <= 0;
+      return `<div class="ws${k === p.slot ? ' on' : ''}${empty ? ' empty' : ''}"><kbd>${key}</kbd><img src="assets/ui/${WEAPONS[it.id].icon}.svg" alt=""><small>${it.mag + it.reserve}</small></div>`;
+    }).join('');
   }
 
   streaks(p) {
@@ -77,7 +84,7 @@ export class HUD {
     p.streak = st;
     $('streaks').innerHTML = [...STREAKS].reverse().map((s) => {
       const ready = p.rewards.includes(s.id);
-      return `<div class="sk ${ready ? 'ready' : ''}"><img src="assets/ui/s_${s.id}.svg" alt=""><kbd>${STREAKS.indexOf(s) + 3}</kbd>` +
+      return `<div class="sk ${ready ? 'ready' : ''}"><img src="assets/ui/s_${s.id}.svg" alt=""><kbd>${STREAKS.indexOf(s) + 4}</kbd>` +
         `<span>${s.name}${ready ? ' <em>사용 가능</em>' : ` <small>${Math.min(st, s.kills)}/${s.kills}킬</small>`}</span></div>`;
     }).join('');
   }

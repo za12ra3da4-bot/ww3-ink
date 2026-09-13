@@ -250,8 +250,7 @@ export class Room {
     if (Number.isFinite(+m.pitch)) e.pitch = clamp(+m.pitch, -1.55, 1.55);
     e.flags = (m.f | 0) & 0x7e;
     e.crouch = !!(e.flags & 2);
-    const C = CLS[e.cls];
-    if (m.w === C.primary || m.w === C.secondary) e.w = m.w;
+    if (CLS[e.cls].weapons.includes(m.w)) e.w = m.w;
   }
 
   onChat(e, m) {
@@ -306,6 +305,7 @@ export class Room {
     const C = CLS[e.cls];
     e.w = C.primary;
     e.grenades = C.grenades;
+    e.rockets = C.rockets;
     e.life++;
     if (e.bot) e.brain.onSpawn();
     else if (notify) this.emitTo(e, 'spawn', { x: e.x, y: e.y, z: e.z, yaw: e.yaw, cls: e.cls, life: e.life, rw: e.rewards, gr: e.grenades, st: e.streak });

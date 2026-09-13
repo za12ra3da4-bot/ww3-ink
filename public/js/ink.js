@@ -36,7 +36,7 @@ float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
 void main() {
   vec2 px = 1.0 / uRes;
-  vec2 wob = (vec2(noise(vUv * 38.0), noise(vUv * 38.0 + 19.7)) - 0.5) * px * 2.0;
+  vec2 wob = (vec2(noise(vUv * 38.0), noise(vUv * 38.0 + 19.7)) - 0.5) * px * 0.8;
   vec2 uv = vUv + wob;
   vec3 col = texture2D(tColor, uv).rgb;
   float d = linDepth(uv);
@@ -61,16 +61,27 @@ void main() {
 
   float mist = smoothstep(uMist.x, uMist.y, d) * (1.0 - step(700.0, d));
   float edge = clamp(edgeD + edgeL * 0.7, 0.0, 1.0);
-  edge *= mix(0.55, 1.0, noise(vUv * uRes / 2.5));
+  edge *= mix(0.8, 1.0, noise(vUv * uRes / 2.5));
   edge *= 1.0 - mist * 0.92;
 
   // 먹 농담
   float L = luma(col);
   float ink = 1.0 - L;
   float band = floor(ink * 5.0 + noise(vUv * 6.0) * 0.6) / 5.0;
-  ink = mix(ink, band, 0.28);
-  ink = pow(clamp(ink, 0.0, 1.0), 1.15);
-  ink *= 0.86 + 0.26 * noise(vUv * uRes / 3.0);
+  ink = mix(ink, band, 0.1);
+  ink = pow(clamp(ink, 0.0, 1.0), 1.1);
+  ink *= 0.97 + 0.06 * noise(vUv * uRes / 2.0);
+
+  // 주변광 차폐: 가까운 곳이 둘러싸면 먹이 살짝 짙어진다 (구석·틈의 깊이감)
+  float ao = 0.0;
+  float rad = clamp(9.0 / d, 1.5, 14.0);
+  for (int k = 0; k < 8; k++) {
+    float a = float(k) * 0.785 + 0.4;
+    vec2 o2 = vec2(cos(a), sin(a)) * px * rad * (1.0 + 0.5 * mod(float(k), 2.0));
+    float dd = d - linDepth(uv + o2);
+    ao += smoothstep(0.08, 0.6, dd) * (1.0 - smoothstep(0.6, 3.0, dd));
+  }
+  ink = clamp(ink + (ao / 8.0) * 0.28 * (1.0 - sky), 0.0, 1.0);
   ink *= 1.0 - mist * 0.9;
 
   vec3 paper = texture2D(tPaper, gl_FragCoord.xy / 512.0).rgb;
@@ -81,7 +92,7 @@ void main() {
   float mx = max(col.r, max(col.g, col.b)), mn = min(col.r, min(col.g, col.b));
   float sat = (mx - mn) / max(mx, 0.08);
   float ck = smoothstep(0.22, 0.55, sat) * smoothstep(0.02, 0.12, mx) * (1.0 - mist * 0.75) * (1.0 - sky);
-  vec3 tinted = col * (paper / vec3(0.94, 0.905, 0.83)) * (0.92 + 0.16 * noise(vUv * uRes / 4.0));
+  vec3 tinted = col * (paper / vec3(0.94, 0.905, 0.83));
   c = mix(c, tinted, ck * 0.92);
 
   c = mix(c, inkCol, edge * (1.0 - sky));

@@ -58,7 +58,7 @@ function bulletHoles(img, count, scale = 1) {
     const u = x / S, v = y / S;
     gray(d, i, 0.7 + (fbm(n, u * 6, v * 6, 6, 5) - 0.5) * 0.38 + (n2(u * 160, v * 160, 160) - 0.5) * 0.09);
   });
-  for (let k = 0; k < 30; k++) img.dot(rnd() * S, rnd() * S, 20 + rnd() * 60, INK, 0.04 + rnd() * 0.06, 1);
+  for (let k = 0; k < 8; k++) img.dot(rnd() * S, rnd() * S, 30 + rnd() * 50, INK, 0.02, 1);
   for (let k = 0; k < 26; k++) crack(img, rnd() * S, rnd() * S, 20 + rnd() * 70, 0.8 + rnd() * 1.2, 0.35);
   for (let k = 0; k < 700; k++) {
     const light = rnd() < 0.4;

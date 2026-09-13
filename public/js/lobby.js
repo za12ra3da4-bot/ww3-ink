@@ -8,14 +8,12 @@ import { buildSoldier, buildGun } from './models.js';
 import { buildProps } from './props.js';
 import { tex, bannerTexture, mapThumb } from './assets.js';
 import { skinThumb } from './skins.js';
-import { previewMap, esc } from './hud.js';
+import { previewMap } from './hud.js';
+import { GachaFX, VOICE_NAMES } from './gacha.js';
 
 const $ = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-export const VOICE_NAMES = {
-  classic: '기본 총성', dry: '건조한 총성', thud: '둔탁한 총성', frost: '서리 울림', crisp: '맑은 총성', heavy: '묵직한 포효',
-  wood: '목탁 소리', thunder: '천둥', bell: '풍경 소리', silent: '소음기', phoenix: '봉황의 울음', laser: '뇌전',
-};
+export { VOICE_NAMES };
 
 export class Lobby {
   constructor(game, handlers) {
@@ -149,13 +147,15 @@ export class Lobby {
       R.torso.rotation.x = -0.05 + breathe * 0.015;
       R.head.rotation.x = -0.05 + Math.sin(t * 0.7) * 0.04;
       R.head.rotation.y = Math.sin(t * 0.33) * 0.2;
-      const pistol = this.tab === 'armory' && this.weapon === 'pistol';
-      R.arms[1].sh.rotation.set(pistol ? 0.5 : 0.95, -0.12, 0);
-      R.arms[1].elbow.rotation.x = pistol ? 0.3 : 0.65;
-      R.arms[0].sh.rotation.set(pistol ? 0.1 : 1.05, pistol ? 0.1 : 0.55, 0);
-      R.arms[0].elbow.rotation.x = pistol ? 0.1 : 0.85;
-      R.gunMount.rotation.x = pistol ? -1.0 : -0.5;
-      R.gunMount.position.set(0.08, pistol ? 0.1 : 0.3, pistol ? -0.12 : -0.28);
+      // 무기고에서는 총이 잘 보이도록 가슴 앞에 가로로 든다
+      const show = this.tab === 'armory';
+      const pistol = show && this.weapon === 'pistol';
+      R.arms[1].sh.rotation.set(pistol ? 1.2 : show ? 1.25 : 0.95, -0.12, 0);
+      R.arms[1].elbow.rotation.x = pistol ? 0.2 : show ? 0.9 : 0.65;
+      R.arms[0].sh.rotation.set(pistol ? 1.1 : show ? 1.35 : 1.05, pistol ? 0.3 : 0.6, 0);
+      R.arms[0].elbow.rotation.x = pistol ? 0.3 : show ? 1.0 : 0.85;
+      R.gunMount.rotation.set(show ? -0.08 : -0.5, show ? -0.5 : 0, 0);
+      R.gunMount.position.set(show ? 0.02 : 0.08, show ? 0.36 : 0.3, show ? -0.34 : -0.28);
       R.legs[0].thigh.rotation.x = 0.05;
       R.legs[1].thigh.rotation.x = -0.08;
     }
@@ -212,8 +212,12 @@ export class Lobby {
     // 뽑기
     $('pull1').addEventListener('click', () => this.pull(1));
     $('pull10').addEventListener('click', () => this.pull(10));
-    $('gfxClose').addEventListener('click', () => this.closeGacha());
-    $('gfxAgain').addEventListener('click', () => { this.closeGacha(); this.pull(this.lastCount || 1); });
+    this.fx = new GachaFX({
+      sound: this.g.sound,
+      onEquip: (id) => this.h.equip(id),
+      onAgain: () => this.pull(this.lastCount || 1),
+      isEquipped: (id) => this.g.skinFor(SKINS[id].weapon) === id,
+    });
 
     // 3D 무대 돌리기
     const stage = $('stage');
@@ -360,58 +364,25 @@ export class Lobby {
     $('earnHint').textContent = `코인 얻기 — 처치 ${COIN.kill} · 헤드샷 +${COIN.headshot} · 도움 ${COIN.assist} · 거점 점령 ${COIN.capture} · 승리 ${COIN.win} · 패배 ${COIN.lose}`;
   }
 
-  // ── 뽑기 연출 ───────────────────────────────────
+  // ── 뽑기 ───────────────────────────────────────
   async pull(count) {
     const p = this.g.profile;
     const cost = count === 10 ? GACHA.cost10 : GACHA.cost;
-    if (!p || p.coins < cost || this.pulling) {
-      if (p && p.coins < cost) $('menuError').textContent = `코인이 부족합니다. (${cost} 필요) 전투에서 모아 오세요.`;
+    if (this.fx.busy) return;
+    if (!p || p.coins < cost) {
+      $('menuError').textContent = p ? `코인이 부족합니다. (${cost} 필요) 전투에서 모아 오세요.` : '서버에 연결되어야 뽑을 수 있습니다.';
       return;
     }
-    this.pulling = true;
+    $('menuError').textContent = '';
     this.lastCount = count;
     this.g.sound.init();
-    const fx = $('gachaFx'), stage = $('gfxStage');
-    fx.hidden = false;
-    fx.className = 'gfx';
-    $('gfxActions').hidden = true;
-    stage.innerHTML = '<img class="gfx-scroll" src="assets/ui/scroll.svg" alt="">';
-    this.g.sound.play('drum');
-    const [res] = await Promise.all([this.h.gacha(count), wait(1300)]);
-    if (!res || !res.ok) {
-      stage.innerHTML = `<p class="gfx-err">${esc((res && res.error) || '뽑기에 실패했습니다.')}</p>`;
-      $('gfxActions').hidden = false;
-      this.pulling = false;
-      return;
-    }
-    const thumbs = await Promise.all(res.results.map((r) => skinThumb(r.id, 240, 80)));
-    const best = res.results.reduce((a, r) => (RARITY_ORDER.indexOf(r.rarity) > RARITY_ORDER.indexOf(a) ? r.rarity : a), 'common');
-    fx.classList.add(`best-${best}`, 'burst');
-    this.g.sound.play(best === 'legendary' ? 'legend' : best === 'epic' ? 'gong' : 'reveal');
-    await wait(450);
-    const card = (r, i) => {
-      const s = SKINS[r.id];
-      return `<div class="gcard r-${r.rarity}${r.dup ? ' dup' : ''}" style="--i:${i}">
-        <div class="gc-rar"><b class="hanja">${RARITY[r.rarity].hanja}</b>${RARITY[r.rarity].name}</div>
-        <img src="${thumbs[i]}" alt="">
-        <strong>${s.name}</strong><small>${WEAPONS[s.weapon].name} · ${VOICE_NAMES[s.sound]}</small>
-        ${r.dup ? `<em>중복 · +${r.refund} 코인</em>` : '<em class="new">새 스킨</em>'}
-      </div>`;
-    };
-    stage.innerHTML = `<div class="gfx-cards n${res.results.length}">${res.results.map(card).join('')}</div>`;
-    res.results.forEach((r, i) => setTimeout(() => {
-      if (r.rarity === 'legendary' || r.rarity === 'epic') this.g.sound.play('coin');
-      else this.g.sound.play('click');
-    }, 120 * i + 200));
-    this.h.setProfile(res.profile);
-    await wait(res.results.length * 120 + 500);
-    $('gfxActions').hidden = false;
-    $('gfxAgain').disabled = this.g.profile.coins < cost;
-    this.pulling = false;
+    const res = await this.fx.run(count, this.h.gacha(count));
+    if (res && res.ok) this.h.setProfile(res.profile);
+    $('gfxAgain').disabled = !this.g.profile || this.g.profile.coins < cost;
   }
 
   closeGacha() {
-    $('gachaFx').hidden = true;
-    $('gfxStage').innerHTML = '';
+    this.fx.close();
   }
+
 }

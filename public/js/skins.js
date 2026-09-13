@@ -209,6 +209,282 @@ export function drawPattern(ctx, style, S = 512) {
       ctx.fillStyle = '#ffffff';
       for (let i = 0; i < 60; i++) ctx.fillRect(R() * S, R() * S, 2, 2);
       break;
+    case 'digital': {
+      const cell = 16;
+      const cols = [accent, shade(body, 1.25), shade(body, 0.75), body];
+      for (let y = 0; y < S; y += cell) {
+        for (let x = 0; x < S; x += cell) {
+          const n = Math.sin(x * 0.021 + Math.sin(y * 0.017) * 3) + Math.cos(y * 0.019 + x * 0.007) + (R() - 0.5) * 0.8;
+          ctx.fillStyle = cols[Math.max(0, Math.min(3, Math.floor((n + 2) * 1)))];
+          ctx.fillRect(x, y, cell, cell);
+        }
+      }
+      break;
+    }
+    case 'rust':
+      for (let i = 0; i < 60; i++) {
+        const x = R() * S, y = R() * S, r = 10 + R() * 50;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, R() < 0.5 ? accent : shade(accent, 0.6));
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 0.35 + R() * 0.4;
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = shade(body, 0.5);
+      for (let i = 0; i < 30; i++) { ctx.lineWidth = 1 + R() * 2; ctx.beginPath(); const x = R() * S; ctx.moveTo(x, 0); ctx.lineTo(x + (R() - 0.5) * 30, S); ctx.stroke(); }
+      break;
+    case 'hanji':
+    case 'hangul': {
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = shade(body, 0.8);
+      for (let i = 0; i < 300; i++) ctx.fillRect(R() * S, R() * S, 1 + R() * 18, 1);
+      ctx.globalAlpha = 1;
+      if (pattern === 'hanji') {
+        ctx.strokeStyle = accent;
+        for (let i = 0; i < 6; i++) {
+          ctx.lineWidth = 8 + R() * 16;
+          ctx.globalAlpha = 0.6 + R() * 0.4;
+          ctx.beginPath();
+          const x = R() * S, y = R() * S;
+          ctx.moveTo(x, y);
+          ctx.quadraticCurveTo(x + (R() - 0.5) * 300, y + (R() - 0.5) * 200, x + (R() - 0.5) * 400, y + (R() - 0.5) * 300);
+          ctx.stroke();
+        }
+      } else {
+        const letters = '가나다라마바사아자차카타파하한글묵전청흑용봉호랑';
+        ctx.fillStyle = accent;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let y = 36; y < S; y += 72) {
+          for (let x = 36; x < S; x += 72) {
+            ctx.font = `${48 + R() * 20}px 'Nanum Brush Script', 'Song Myung', serif`;
+            ctx.globalAlpha = 0.55 + R() * 0.45;
+            ctx.save(); ctx.translate(x, y); ctx.rotate((R() - 0.5) * 0.4);
+            ctx.fillText(letters[Math.floor(R() * letters.length)], 0, 0);
+            ctx.restore();
+          }
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#b3301c';
+        ctx.fillRect(S - 70, S - 70, 44, 44);
+      }
+      break;
+    }
+    case 'magpie':
+      ctx.fillStyle = '#f4f2ec';
+      for (let i = 0; i < 7; i++) {
+        const x = R() * S, y = R() * S;
+        ctx.beginPath(); ctx.ellipse(x, y, 70, 26, R() * Math.PI, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 6;
+      for (let i = 0; i < 16; i++) {
+        const x = R() * S, y = R() * S, a = R() * Math.PI;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+        for (let f = -3; f <= 3; f++) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(30, f * 6, 70, f * 12); ctx.stroke(); }
+        ctx.restore();
+      }
+      break;
+    case 'crackle':
+      ctx.strokeStyle = shade(body, 0.65);
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 70; i++) {
+        let x = R() * S, y = R() * S;
+        ctx.beginPath(); ctx.moveTo(x, y);
+        for (let k = 0; k < 5; k++) { x += (R() - 0.5) * 50; y += (R() - 0.5) * 50; ctx.lineTo(x, y); }
+        ctx.stroke();
+      }
+      ctx.fillStyle = accent;
+      ctx.strokeStyle = shade(body, 0.4);
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 6; i++) {
+        const x = R() * S, y = R() * S;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(R() * 6.28);
+        ctx.beginPath(); ctx.ellipse(0, 0, 36, 12, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(30, -4); ctx.quadraticCurveTo(60, -30, 76, -26); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(-40, -50); ctx.lineTo(10, -14); ctx.fill();
+        ctx.restore();
+      }
+      break;
+    case 'neon':
+      ctx.shadowBlur = 16;
+      for (const [c, n] of [[accent, 10], ['#38e8ff', 9], ['#ffe14a', 4]]) {
+        ctx.strokeStyle = c;
+        ctx.shadowColor = c;
+        for (let i = 0; i < n; i++) {
+          ctx.lineWidth = 3 + R() * 3;
+          ctx.beginPath();
+          let x = R() * S, y = R() * S;
+          ctx.moveTo(x, y);
+          for (let k = 0; k < 4; k++) { if (k % 2) x += (R() - 0.5) * 260; else y += (R() - 0.5) * 260; ctx.lineTo(x, y); }
+          ctx.stroke();
+        }
+      }
+      ctx.shadowBlur = 0;
+      break;
+    case 'tiger':
+    case 'whitetiger':
+      ctx.fillStyle = pattern === 'tiger' ? accent : '#141414';
+      for (let i = 0; i < 26; i++) {
+        const y = R() * S, w = 20 + R() * 30;
+        ctx.beginPath();
+        ctx.moveTo(-20, y);
+        ctx.bezierCurveTo(S * 0.3, y - w, S * 0.5, y + w * 1.4, S * 0.55 + R() * 200, y + (R() - 0.5) * 40);
+        ctx.bezierCurveTo(S * 0.45, y + w * 0.4, S * 0.25, y + w * 0.2, -20, y + 10);
+        ctx.fill();
+      }
+      if (pattern === 'whitetiger') {
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.arc(R() * S, R() * S, 20 + R() * 40, 0, Math.PI * (0.5 + R())); ctx.stroke(); }
+        ctx.shadowBlur = 0;
+      }
+      break;
+    case 'dancheong': {
+      const tile = 128;
+      for (let y = 0; y < S; y += tile) {
+        for (let x = 0; x < S; x += tile) {
+          ctx.save(); ctx.translate(x + tile / 2, y + tile / 2);
+          for (const [r, c] of [[58, accent], [46, '#e8c35a'], [36, '#2b4f8f'], [24, '#efe7d6'], [14, accent]]) {
+            ctx.fillStyle = c;
+            ctx.beginPath();
+            for (let p = 0; p < 8; p++) { const a = (p / 8) * Math.PI * 2; const rr = p % 2 ? r * 0.72 : r; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+      break;
+    }
+    case 'wisp':
+      for (let i = 0; i < 14; i++) {
+        const x = R() * S, y = R() * S, r = 20 + R() * 40;
+        const g = ctx.createRadialGradient(x, y + r * 0.3, 1, x, y, r);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.3, accent); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(x - r * 0.7, y + r * 0.4);
+        ctx.quadraticCurveTo(x - r * 0.2, y - r * 1.8, x + r * 0.1, y - r * 2.2);
+        ctx.quadraticCurveTo(x + r * 0.9, y - r * 0.6, x + r * 0.6, y + r * 0.5);
+        ctx.arc(x, y + r * 0.3, r * 0.65, 0, Math.PI);
+        ctx.fill();
+      }
+      break;
+    case 'pearl':
+      for (let i = 0; i < 90; i++) {
+        const x = R() * S, y = R() * S, w = 8 + R() * 30, h = 4 + R() * 14;
+        const g = ctx.createLinearGradient(x, y, x + w, y + h);
+        g.addColorStop(0, '#9fe7e0'); g.addColorStop(0.35, '#f3d6ff'); g.addColorStop(0.7, '#d9f7c8'); g.addColorStop(1, '#8fc3ff');
+        ctx.fillStyle = g;
+        ctx.globalAlpha = 0.6 + R() * 0.4;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(R() * 6.28);
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(w, h * 0.3); ctx.lineTo(w * 0.7, h); ctx.lineTo(-w * 0.1, h * 0.8); ctx.fill();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#e8c35a';
+      ctx.lineWidth = 2;
+      for (let x = 40; x < S; x += 160) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.bezierCurveTo(x + 60, S * 0.3, x - 60, S * 0.7, x, S); ctx.stroke(); }
+      break;
+    case 'lava':
+    case 'flame':
+      if (pattern === 'lava') {
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 14;
+        ctx.strokeStyle = accent;
+        for (let i = 0; i < 40; i++) {
+          ctx.lineWidth = 2 + R() * 5;
+          let x = R() * S, y = R() * S;
+          ctx.beginPath(); ctx.moveTo(x, y);
+          for (let k = 0; k < 4; k++) { x += (R() - 0.5) * 80; y += (R() - 0.5) * 80; ctx.lineTo(x, y); }
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+      } else {
+        for (let i = 0; i < 26; i++) {
+          const x = R() * S, y = R() * S + 60, h = 60 + R() * 120, w = 20 + R() * 30;
+          const g = ctx.createLinearGradient(x, y, x, y - h);
+          g.addColorStop(0, '#ffe36a'); g.addColorStop(0.4, accent); g.addColorStop(1, 'rgba(160,20,10,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(x - w, y);
+          ctx.quadraticCurveTo(x - w, y - h * 0.6, x + (R() - 0.5) * w, y - h);
+          ctx.quadraticCurveTo(x + w, y - h * 0.5, x + w, y);
+          ctx.fill();
+        }
+        ctx.strokeStyle = '#ffd35a';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 5; i++) {
+          const x = R() * S, y = R() * S;
+          ctx.beginPath();
+          for (let f = 0; f < 6; f++) { ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 40, y - 20 - f * 8, x + 90, y - f * 14); }
+          ctx.stroke();
+        }
+      }
+      break;
+    case 'galaxy': {
+      for (const [c, n] of [[accent, 5], ['#4fb0ff', 4], ['#ff6fd0', 3]]) {
+        for (let i = 0; i < n; i++) {
+          const x = R() * S, y = R() * S, r = 80 + R() * 140;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, c); g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = g;
+          ctx.fillRect(x - r, y - r, r * 2, r * 2);
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 220; i++) { const s2 = R() < 0.9 ? 1.5 : 3.5; ctx.globalAlpha = 0.4 + R() * 0.6; ctx.fillRect(R() * S, R() * S, s2, s2); }
+      break;
+    }
+    case 'hexshell': {
+      const r = 38, h = r * Math.sqrt(3);
+      ctx.lineWidth = 4;
+      for (let row = -1; row < S / h + 1; row++) {
+        for (let col = -1; col < S / (r * 1.5) + 1; col++) {
+          const cx = col * r * 1.5, cy = row * h + (col % 2 ? h / 2 : 0);
+          ctx.beginPath();
+          for (let p = 0; p < 6; p++) { const a = (p / 6) * Math.PI * 2; ctx.lineTo(cx + Math.cos(a) * (r - 3), cy + Math.sin(a) * (r - 3)); }
+          ctx.closePath();
+          ctx.fillStyle = shade(body, 1.3 + R() * 0.8);
+          ctx.fill();
+          ctx.strokeStyle = accent;
+          ctx.shadowColor = accent;
+          ctx.shadowBlur = 8;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      }
+      break;
+    }
+    case 'taegeuk': {
+      const tile = 256;
+      for (let y = 0; y < S; y += tile) {
+        for (let x = 0; x < S; x += tile) {
+          const cx = x + tile / 2, cy = y + tile / 2, r = 90;
+          ctx.fillStyle = accent;
+          ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0); ctx.arc(cx + r / 2, cy, r / 2, 0, Math.PI, true); ctx.arc(cx - r / 2, cy, r / 2, 0, Math.PI); ctx.fill();
+          ctx.fillStyle = '#0047a0';
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI); ctx.arc(cx - r / 2, cy, r / 2, Math.PI, 0, true); ctx.arc(cx + r / 2, cy, r / 2, Math.PI, 0); ctx.fill();
+          ctx.fillStyle = '#151412';
+          const bar = (bx, by, a, broken) => {
+            ctx.save(); ctx.translate(bx, by); ctx.rotate(a);
+            for (let k = 0; k < 3; k++) {
+              if (broken[k]) { ctx.fillRect(-22, -14 + k * 10, 18, 6); ctx.fillRect(4, -14 + k * 10, 18, 6); } else ctx.fillRect(-22, -14 + k * 10, 44, 6);
+            }
+            ctx.restore();
+          };
+          bar(cx - 110, cy - 90, -Math.PI / 4 - 0.2, [0, 0, 0]);
+          bar(cx + 110, cy + 90, -Math.PI / 4 - 0.2, [1, 1, 1]);
+          bar(cx + 110, cy - 90, Math.PI / 4 + 0.2, [0, 1, 0]);
+          bar(cx - 110, cy + 90, Math.PI / 4 + 0.2, [1, 0, 1]);
+        }
+      }
+      break;
+    }
     default: // plain
       ctx.globalAlpha = 0.12;
       for (let i = 0; i < 400; i++) {

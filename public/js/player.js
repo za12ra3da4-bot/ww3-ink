@@ -1,6 +1,6 @@
 // 내 병사 — 입력, 이동 물리, 사격 판정, 1인칭 무기 모델(스킨)
 import * as THREE from 'three';
-import { PLAYER, WEAPONS, CLASSES, STREAKS, SKINS, TEAMS, defaultSkin } from '../shared/config.js';
+import { PLAYER, WEAPONS, CLASSES, STREAKS, SKINS, TEAMS, SLOT_KEYS, defaultSkin } from '../shared/config.js';
 import { moveBody, rayPlayer } from '../shared/physics.js';
 import { buildViewmodel, GUN_MUZZLE } from './models.js';
 
@@ -58,8 +58,10 @@ export class LocalPlayer {
       if (e.code === 'KeyR') this.startReload();
       else if (e.code === 'Digit1') this.switchTo('primary');
       else if (e.code === 'Digit2') this.switchTo('secondary');
+      else if (e.code === 'Digit3') this.switchTo('launcher');
       else if (e.code === 'KeyG') this.throwGrenade();
-      else if (e.code === 'Digit3' || e.code === 'Digit4' || e.code === 'Digit5') this.useStreak(STREAKS[+e.code.slice(5) - 3]);
+      else if (e.code === 'Digit4' || e.code === 'Digit5' || e.code === 'Digit6') this.useStreak(STREAKS[+e.code.slice(5) - 4]);
+      else if (e.code === 'KeyQ' && this.g.locked) this.switchTo(this.lastSlot || 'secondary');
     };
     document.addEventListener('keydown', (e) => onKey(e, true));
     document.addEventListener('keyup', (e) => onKey(e, false));
@@ -73,7 +75,9 @@ export class LocalPlayer {
       if (e.button === 2) this.rmb = false;
     });
     document.addEventListener('wheel', (e) => {
-      if (this.control && Math.abs(e.deltaY) > 20) this.switchTo(this.slot === 'primary' ? 'secondary' : 'primary');
+      if (!this.control || Math.abs(e.deltaY) < 20) return;
+      const i = SLOT_KEYS.indexOf(this.slot), n = SLOT_KEYS.length;
+      this.switchTo(SLOT_KEYS[(i + (e.deltaY > 0 ? 1 : n - 1)) % n]);
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.g.locked || !this.alive || !this.g.active) return;
@@ -102,8 +106,8 @@ export class LocalPlayer {
     this.grenades = msg.gr;
     this.rewards = msg.rw || [];
     this.streak = msg.st || 0;
-    const mk = (id) => ({ id, mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve });
-    this.inv = { primary: mk(C.primary), secondary: mk(C.secondary) };
+    const mk = (id, reserve = WEAPONS[id].reserve) => ({ id, mag: WEAPONS[id].mag, reserve });
+    this.inv = { primary: mk(C.primary), secondary: mk(C.secondary), launcher: mk('rocket', Math.max(0, C.rockets - 1)) };
     this.slot = 'primary';
     this.reloadUntil = 0;
     this.switchUntil = this.g.time + 0.3;
@@ -140,7 +144,8 @@ export class LocalPlayer {
   }
 
   switchTo(slot) {
-    if (slot === this.slot || !this.inv) return;
+    if (slot === this.slot || !this.inv || !this.inv[slot]) return;
+    this.lastSlot = this.slot;
     this.slot = slot;
     this.reloadUntil = 0;
     this.switchUntil = this.g.time + 0.4;

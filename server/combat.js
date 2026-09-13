@@ -60,7 +60,7 @@ export function kill(room, v, k, weapon, head) {
 export function handleFire(room, e, msg) {
   if (!e.alive || !msg) return;
   const w = WEAPONS[msg.w], C = CLS[e.cls];
-  if (!w || w.projectile || (msg.w !== C.primary && msg.w !== C.secondary)) return;
+  if (!w || w.projectile || !C.weapons.includes(msg.w)) return;
   if (room.now - e.lastFireAt < (60 / w.rpm) * 0.6) return;
   e.lastFireAt = room.now;
   e.lastShotAt = room.now;
@@ -118,7 +118,8 @@ export function handleThrow(room, e, msg) {
   const o = vec(msg.o), d = vec(msg.d);
   if (!o || !d) return;
   if (msg.k === 'rocket') {
-    if (CLS[e.cls].secondary !== 'rocket' || room.now - e.lastRocketAt < 2.4) return;
+    if (!CLS[e.cls].weapons.includes('rocket') || e.rockets <= 0 || room.now - e.lastRocketAt < 2.4) return;
+    e.rockets--;
     e.lastRocketAt = room.now;
     e.lastShotAt = room.now;
     launch(room, e, 'rocket', o, d);
