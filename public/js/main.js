@@ -143,6 +143,7 @@ const playerName = () => {
 
 const lobby = new Lobby(game, {
   settings: () => openSettings(settings, applySettings),
+  code: () => openCode(),
   look: (look) => socket.emit('look', { look }, (res) => res && setProfile(res.profile)),
   equip: (skin) => socket.emit('equip', { skin }, (res) => res && setProfile(res.profile)),
   gacha: (count) => new Promise((resolve) => {
@@ -175,28 +176,59 @@ function refreshRooms() {
     ul.querySelectorAll('li[data-code]').forEach((li) => li.addEventListener('click', () => lobby.h.join(li.dataset.code)));
   });
 }
+// ── 보상 코드 창 ──
+function openCode() {
+  const modal = $('codeModal');
+  modal.hidden = false;
+  $('redeemMsg').textContent = '';
+  $('redeemMsg').className = 'code-msg';
+  $('codeCoins').innerHTML = '';
+  sound.init();
+  sound.play('open');
+  setTimeout(() => $('redeemInput').focus(), 350);
+}
+function closeCode() {
+  $('codeModal').hidden = true;
+}
+function coinBurst(n) {
+  const box = $('codeCoins');
+  box.innerHTML = Array.from({ length: Math.min(24, 8 + Math.floor(n / 10)) }, () => {
+    const a = Math.random() * Math.PI * 2, d = 90 + Math.random() * 140;
+    return `<img src="assets/ui/coin.svg" alt="" style="--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d - 60}px;--r:${Math.random() * 720 - 360}deg;animation-delay:${Math.random() * 0.15}s">`;
+  }).join('');
+}
 function redeemCode() {
-  const code = $('redeemInput').value.trim();
-  const msg = $('redeemMsg');
-  if (!code) return;
-  if (!socket.connected) { msg.textContent = '서버 연결 필요'; msg.className = 'bad'; return; }
+  const input = $('redeemInput'), msg = $('redeemMsg');
+  const code = input.value.trim();
+  const fail = (text) => {
+    msg.textContent = text;
+    msg.className = 'code-msg bad';
+    input.classList.remove('shake');
+    void input.offsetWidth;
+    input.classList.add('shake');
+    sound.play('dry');
+  };
+  if (!code) return fail('코드를 입력하세요.');
+  if (!socket.connected) return fail('서버에 연결되어 있지 않습니다.');
   socket.timeout(8000).emit('redeem', { code }, (err, res) => {
-    if (err || !res) { msg.textContent = '응답 없음'; msg.className = 'bad'; return; }
+    if (err || !res) return fail('서버가 응답하지 않습니다.');
     if (res.profile) setProfile(res.profile);
-    if (res.ok) {
-      msg.textContent = `코인 +${res.coins}`;
-      msg.className = 'ok';
-      $('redeemInput').value = '';
-      sound.init();
-      sound.play('coin');
-    } else {
-      msg.textContent = res.error;
-      msg.className = 'bad';
-    }
+    if (!res.ok) return fail(res.error);
+    msg.textContent = `코인 ${res.coins}개를 받았습니다!`;
+    msg.className = 'code-msg ok';
+    input.value = '';
+    coinBurst(res.coins);
+    sound.play('coin');
+    setTimeout(() => sound.play('sparkle'), 120);
   });
 }
 $('redeemBtn').addEventListener('click', redeemCode);
-$('redeemInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') redeemCode(); });
+$('redeemInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') redeemCode();
+  if (e.key === 'Escape') closeCode();
+});
+$('codeClose').addEventListener('click', closeCode);
+$('codeModal').addEventListener('mousedown', (e) => { if (e.target === $('codeModal')) closeCode(); });
 
 const urlCode = new URLSearchParams(location.search).get('room');
 if (urlCode) {

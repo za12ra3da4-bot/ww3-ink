@@ -174,6 +174,7 @@ export class Lobby {
     document.querySelectorAll('.lobby-nav button').forEach((b) => b.addEventListener('click', () => {
       this.g.sound.init();
       if (b.dataset.tab === 'settings') { this.h.settings(); return; }
+      if (b.dataset.tab === 'code') { this.h.code(); return; }
       this.showTab(b.dataset.tab);
       this.g.sound.play('click');
     }));

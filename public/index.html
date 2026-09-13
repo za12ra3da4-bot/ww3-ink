@@ -27,12 +27,7 @@
     <button data-tab="armory"><img src="assets/ui/i_armory.svg" alt=""><span>무기고</span></button>
     <button data-tab="gacha"><img src="assets/ui/i_gacha.svg" alt=""><span>뽑기</span></button>
     <button data-tab="settings"><img src="assets/ui/i_settings.svg" alt=""><span>설정</span></button>
-    <div class="code-box">
-      <span>코드</span>
-      <input id="redeemInput" maxlength="24" placeholder="입력" autocomplete="off" spellcheck="false">
-      <button id="redeemBtn">받기</button>
-      <p id="redeemMsg"></p>
-    </div>
+    <button data-tab="code"><img src="assets/ui/i_code.svg" alt=""><span>코드</span></button>
   </nav>
 
   <div class="lobby-panel">
@@ -126,6 +121,24 @@
     <button id="gfxClose" class="link-btn">닫기</button>
   </div>
   <p id="gfxSkip" class="gfx-skip" hidden>화면을 누르면 건너뜁니다</p>
+</div>
+
+<!-- 보상 코드 창 -->
+<div id="codeModal" class="modal" hidden>
+  <div class="sheet code-sheet">
+    <div class="scroll-rod top"></div>
+    <img src="assets/ui/i_code.svg" class="code-icon" alt="">
+    <h3>보상 코드</h3>
+    <p class="code-sub">받은 코드를 붓으로 적어 넣으세요</p>
+    <input id="redeemInput" class="code-field" maxlength="24" placeholder="코드 입력" autocomplete="off" spellcheck="false">
+    <p id="redeemMsg" class="code-msg"></p>
+    <div class="code-actions">
+      <button id="redeemBtn" class="brush-btn">받 기</button>
+      <button id="codeClose" class="link-btn">닫기</button>
+    </div>
+    <div id="codeCoins" class="code-coins"></div>
+    <div class="scroll-rod bottom"></div>
+  </div>
 </div>
 
 <!-- 설정 창 -->
