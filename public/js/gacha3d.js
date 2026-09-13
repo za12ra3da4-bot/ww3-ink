@@ -58,7 +58,11 @@ export class GachaStage {
     this.spot.position.set(0, 10, 0.5);
     this.spot.target.position.set(0, 1.6, 0);
     this.spot.castShadow = true;
-    scene.add(this.rim, this.spot, this.spot.target);
+    this.fill = new THREE.DirectionalLight(0xfff6ea, 0);
+    this.fill.position.set(2, 3, 6);
+    this.front = new THREE.PointLight(0xffffff, 0, 8);
+    this.front.position.set(0.6, 2.4, 2.6);
+    scene.add(this.rim, this.spot, this.spot.target, this.fill, this.front);
 
     // 바닥: 새겨진 동심원 + 퍼지는 충격파
     this.floorU = { uTime: { value: 0 }, uColor: { value: this.color }, uWave: { value: -1 }, uGlow: { value: 0.2 } };
@@ -224,6 +228,9 @@ export class GachaStage {
     this.floorU.uWave.value = -1;
     this.spot.intensity = 12;
     this.rim.intensity = 0;
+    this.fill.intensity = 0;
+    this.front.intensity = 0;
+    this.gunPivot.position.x = 0;
     this.halo.material.opacity = 0.18;
     this.shock.material.opacity = 0;
     this.clearGun();
@@ -296,7 +303,7 @@ export class GachaStage {
     gun.position.sub(center);
     const holder = new THREE.Group();
     holder.add(gun);
-    holder.scale.setScalar(2.5 / Math.max(size.z, 0.3));
+    holder.scale.setScalar(Math.min(1.9, 1.9 / Math.max(size.z, 0.3)) * (size.z < 0.5 ? 0.75 : 1));
     holder.rotation.y = PI / 2;
     this.U.prog.value = 0;
     const U = this.U;
@@ -326,8 +333,11 @@ export class GachaStage {
     });
     this.gunPivot.add(holder);
     this.gunT = 0;
-    this.camPosGoal.set(0.9, 2.15, 4.6);
-    this.camLookGoal.set(0.55, 2.0, 0);
+    this.gunPivot.position.x = -0.55;
+    this.camPosGoal.set(0.55, 2.3, 5.6);
+    this.camLookGoal.set(0.35, 1.95, 0);
+    this.fill.intensity = 2.2;
+    this.front.intensity = 14;
     this.beamU.uOpacity.value = 0.55;
     this.floorU.uGlow.value = 0.9;
     this.halo.material.opacity = 0.35;

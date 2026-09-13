@@ -618,3 +618,6 @@ input[type='range'] { accent-color: var(--red); }
   15% { opacity: 1; }
   100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); opacity: 0; }
 }
+
+.gfx-actions { position: absolute; left: 0; right: 0; bottom: 7%; justify-content: center; margin: 0; }
+.gshow3d .gs-btns { flex-wrap: wrap; }
